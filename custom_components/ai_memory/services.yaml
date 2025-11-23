@@ -1,12 +1,53 @@
 add_memory:
   name: Add Memory
-  description: Adds a new piece of information to the AI's long-term memory.
+  description: Add a new entry to a specific AI memory
   fields:
-    text:
-      description: The text content to remember.
+    memory_id:
+      name: Memory ID
+      description: The ID of the memory to add to (e.g., 'personal', 'work')
       required: true
-      example: "User prefers coffee black."
+      example: "personal"
+      selector:
+        text:
+    text:
+      name: Text
+      description: The text content to remember
+      required: true
+      example: "User prefers dark mode and hates bright colors"
+      selector:
+        text:
+          multiline: true
 
 clear_memory:
   name: Clear Memory
-  description: Wipes the AI memory file.
+  description: Clear all entries from a specific AI memory
+  fields:
+    memory_id:
+      name: Memory ID
+      description: The ID of the memory to clear (e.g., 'personal', 'work')
+      required: true
+      example: "personal"
+      selector:
+        text:
+
+list_memories:
+  name: List Memories
+  description: List all available AI memories with their details
+  response:
+    type: "dict"
+    required: true
+
+get_context:
+  name: Get Context
+  description: Get formatted memory context for conversation agents (debug)
+  fields:
+    memory_id:
+      name: Memory ID
+      description: Optional - specific memory ID to get context for (omit for all)
+      required: false
+      example: "personal"
+      selector:
+        text:
+  response:
+    type: "dict"
+    required: true

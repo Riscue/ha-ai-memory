@@ -18,8 +18,5 @@ logger:
   default: error
   logs:
     custom_components.ai_memory: debug
-
-ai_memory:
-  memory_location: ai.json
 " >> config/configuration.yaml
 fi
