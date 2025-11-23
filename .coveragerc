@@ -1,0 +1,3 @@
+[run]
+branch = True
+source = custom_components/ai_memory/

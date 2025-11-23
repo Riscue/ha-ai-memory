@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -e
+
+pip install uv
+
+uv venv --python=3.13 homeassistant
+
+source homeassistant/bin/activate
+
+uv pip install -r requirements.test.txt
+
+hass --config config --script ensure_config
+
+if ! grep -R "logger" config/configuration.yaml >> /dev/null;then
+echo "
+logger:
+  default: error
+  logs:
+    custom_components.ai_memory: debug
+
+ai_memory:
+  memory_location: ai.json
+" >> config/configuration.yaml
+fi

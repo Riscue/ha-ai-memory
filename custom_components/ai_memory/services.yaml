@@ -1,0 +1,12 @@
+add_memory:
+  name: Add Memory
+  description: Adds a new piece of information to the AI's long-term memory.
+  fields:
+    text:
+      description: The text content to remember.
+      required: true
+      example: "User prefers coffee black."
+
+clear_memory:
+  name: Clear Memory
+  description: Wipes the AI memory file.

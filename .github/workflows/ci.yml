@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.test.txt
+
+      - name: Cache pip packages
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.test.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.test.txt
+
+      - name: Run tests
+        run: pytest --cov
+
+  tag-and-release:
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.test.txt
+
+      - name: Get Version
+        id: version
+        run: |
+          VERSION="$(python3 ./.github/actions/get_version.py)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Check Tag Exists
+        id: check_tag
+        run: |
+          git fetch --tags
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.version.outputs.version }} already exists, skipping release"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.version.outputs.version }} does not exist, will create release"
+          fi
+
+      - name: Push Tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: ZIP Component Dir
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          cd ${{ github.workspace }}/custom_components/ai_memory
+          zip -r ${{ github.workspace }}/ai_memory.zip ./
+
+      - name: Upload zip to release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090 # v2.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: ${{ github.workspace }}/ai_memory.zip
+          tag_name: "v${{ steps.version.outputs.version }}"
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') }}
+          generate_release_notes: true
