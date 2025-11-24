@@ -7,7 +7,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN, MemoryManager
+from . import MemoryManager
+from .platform_helpers import async_setup_platform_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,19 +19,10 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up AI Memory buttons."""
-    memory_managers = hass.data[DOMAIN].get("memory_managers", {})
-
-    _LOGGER.debug(f"Setting up buttons, found {len(memory_managers)} memory managers")
-
-    buttons = []
-
-    # Add clear button for each memory manager (add functionality will be via text input)
-    for manager in memory_managers.values():
-        _LOGGER.debug(f"Creating clear button for {manager.memory_name}")
-        buttons.append(AIMemoryClearButton(hass, entry, manager))
-
-    _LOGGER.debug(f"Creating {len(buttons)} AI Memory buttons: {[b.name for b in buttons]}")
-    async_add_entities(buttons, True)
+    await async_setup_platform_entities(
+        hass, entry, async_add_entities,
+        AIMemoryClearButton, "button"
+    )
 
 
 class AIMemoryClearButton(ButtonEntity):
@@ -46,10 +38,8 @@ class AIMemoryClearButton(ButtonEntity):
         self.entry = entry
         self.memory_manager = memory_manager
         if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
-            # Short name for device-linked memories
             self._attr_name = "Clear Memory"
         else:
-            # Full name for stand-alone memories
             self._attr_name = f"Clear {memory_manager.memory_name}"
 
         self._attr_unique_id = f"ai_memory_clear_{memory_manager.memory_id}"

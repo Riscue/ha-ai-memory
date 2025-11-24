@@ -7,7 +7,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN, MemoryManager
+from . import MemoryManager
+from .platform_helpers import async_setup_platform_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,14 +19,10 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up AI Memory text inputs."""
-    memory_managers = hass.data[DOMAIN].get("memory_managers", {})
-
-    text_inputs = []
-    for manager in memory_managers.values():
-        text_inputs.append(AIMemoryTextInput(hass, entry, manager))
-
-    _LOGGER.debug(f"Creating {len(text_inputs)} AI Memory text inputs")
-    async_add_entities(text_inputs, True)
+    await async_setup_platform_entities(
+        hass, entry, async_add_entities,
+        AIMemoryTextInput, "text"
+    )
 
 
 class AIMemoryTextInput(TextEntity):
@@ -41,25 +38,20 @@ class AIMemoryTextInput(TextEntity):
         self.entry = entry
         self.memory_manager = memory_manager
         if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
-            # Short name for device-linked memories
             self._attr_name = "Add Memory"
         else:
-            # Full name for stand-alone memories
             self._attr_name = f"Add to {memory_manager.memory_name}"
 
         self._attr_unique_id = f"ai_memory_text_{memory_manager.memory_id}"
         self._attr_icon = "mdi:brain-plus"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_mode = TextMode.TEXT
-        self._attr_max = 1000  # Maximum 1000 characters
-        self._attr_min = 1  # Minimum 1 character
+        self._attr_max = 1000
+        self._attr_min = 1
         self._attr_pattern = None
         self._native_value = ""
-
-        # All text inputs should be disabled by default
         self._attr_entity_registry_enabled_default = False
 
-        # Link to device if device info is available - use precomputed device info
         if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
             self._attr_device_info = memory_manager.device_info
 
@@ -73,8 +65,7 @@ class AIMemoryTextInput(TextEntity):
         if value and value.strip():
             try:
                 await self.memory_manager.async_add_memory(value.strip())
-                _LOGGER.debug(f"Added memory entry to {self.memory_manager.memory_name}: {value[:50]}...")
-                self._native_value = ""  # Clear after successful submission
+                self._native_value = ""
                 self.async_write_ha_state()
             except Exception as e:
                 _LOGGER.error(f"Failed to add memory to {self.memory_manager.memory_id}: {e}")

@@ -10,9 +10,9 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 
-_LOGGER = logging.getLogger(__name__)
+from .constants import DOMAIN
 
-DOMAIN = "ai_memory"
+_LOGGER = logging.getLogger(__name__)
 
 
 class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

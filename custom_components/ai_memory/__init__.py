@@ -22,9 +22,16 @@ async def async_setup(hass: HomeAssistant, config: dict):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up AI Memory from a config entry."""
-    _LOGGER.debug(f"Setting up AI Memory: {entry.title}")
-    _LOGGER.debug(f"Entry ID: {entry.entry_id}, Domain: {entry.domain}, Source: {entry.source}")
+    # Early validation
+    if not hasattr(entry, 'entry_id'):
+        _LOGGER.error("Config entry missing entry_id attribute")
+        return False
 
+    if entry.domain != DOMAIN:
+        _LOGGER.error(f"CRITICAL: entry.domain is '{entry.domain}' but should be '{DOMAIN}'!")
+        return False
+
+    
     # Ensure domain data exists
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
@@ -145,29 +152,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         memory_id = f"private_{safe_name}"
 
         # Get device info for this agent
-        device_info = None
-        try:
-            from homeassistant.helpers import entity_registry as er
-            entity_reg = er.async_get(hass)
-
-            # Try to find the device for this conversation agent
-            for reg_entry in entity_reg.entities.values():
-                if reg_entry.domain == "conversation":
-                    state = hass.states.get(reg_entry.entity_id)
-                    if state and state.attributes.get("friendly_name") == name:
-                        if reg_entry.device_id:
-                            from homeassistant.helpers import device_registry as dr
-                            device_reg = dr.async_get(hass)
-                            device = device_reg.async_get(reg_entry.device_id)
-                            if device:
-                                device_info = {
-                                    "identifiers": device.identifiers,
-                                    "name": device.name,
-                                    "connections": device.connections,
-                                }
-                                break
-        except Exception as e:
-            _LOGGER.debug(f"Could not get device info for agent {name}: {e}")
+        device_info = _get_device_info_for_agent(hass, name)
 
         manager = MemoryManager(
             hass,
@@ -181,21 +166,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.data[DOMAIN]["memory_managers"][memory_id] = manager
         _LOGGER.debug(f"Initialized Private Memory for agent: {name} (device: {device_info is not None})")
 
-    # Debug: Log all memory managers
-    _LOGGER.debug(f"Total memory managers created: {len(hass.data[DOMAIN]['memory_managers'])}")
-    for mid, mgr in hass.data[DOMAIN]["memory_managers"].items():
-        _LOGGER.debug(f"  - {mid}: {mgr.memory_name}")
-
-    # Forward setup to sensor platform
-    _LOGGER.debug(f"About to forward - Entry domain: {entry.domain}, Entry ID: {getattr(entry, 'entry_id', 'N/A')}")
-    _LOGGER.debug(f"Entry object type: {type(entry).__name__}, Entry title: {getattr(entry, 'title', 'N/A')}")
-
-    # Sanity check
-    if entry.domain != DOMAIN:
-        _LOGGER.error(f"CRITICAL: entry.domain is '{entry.domain}' but should be '{DOMAIN}'!")
-        _LOGGER.error(f"Entry type: {type(entry)}, this might be a Home Assistant bug!")
-        return False
-
+    # Forward setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.TEXT, Platform.BUTTON])
 
     # Register services
@@ -227,33 +198,9 @@ async def async_setup_device_linking(hass: HomeAssistant):
             agent_name = manager.memory_name.replace("Private Memory: ", "")
 
             # Try to get device info
-            device_info = None
-            try:
-                from homeassistant.helpers import entity_registry as er
-                entity_reg = er.async_get(hass)
-
-                # Try to find the device for this conversation agent
-                for reg_entry in entity_reg.entities.values():
-                    if reg_entry.domain == "conversation":
-                        state = hass.states.get(reg_entry.entity_id)
-                        if state and state.attributes.get("friendly_name") == agent_name:
-                            if reg_entry.device_id:
-                                from homeassistant.helpers import device_registry as dr
-                                device_reg = dr.async_get(hass)
-                                device = device_reg.async_get(reg_entry.device_id)
-                                if device:
-                                    device_info = {
-                                        "identifiers": device.identifiers,
-                                        "name": device.name,
-                                        "connections": device.connections,
-                                    }
-                                    _LOGGER.debug(f"Linked {agent_name} to device: {device.name}")
-                                    break
-            except Exception as e:
-                _LOGGER.debug(f"Could not get device info for agent {agent_name}: {e}")
-
-            # Update manager with device info
+            device_info = _get_device_info_for_agent(hass, agent_name)
             if device_info:
+                _LOGGER.debug(f"Linked {agent_name} to device: {device_info['name']}")
                 manager.device_info = device_info
                 updated_count += 1
 
@@ -319,6 +266,32 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
         _LOGGER.debug(f"AI Memory entry '{entry.title}' successfully removed")
 
     return unload_ok
+
+
+def _get_device_info_for_agent(hass: HomeAssistant, agent_name: str) -> dict:
+    """Get device info for a conversation agent."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+        entity_reg = er.async_get(hass)
+
+        for reg_entry in entity_reg.entities.values():
+            if reg_entry.domain == "conversation":
+                state = hass.states.get(reg_entry.entity_id)
+                if state and state.attributes.get("friendly_name") == agent_name:
+                    if reg_entry.device_id:
+                        from homeassistant.helpers import device_registry as dr
+                        device_reg = dr.async_get(hass)
+                        device = device_reg.async_get(reg_entry.device_id)
+                        if device:
+                            return {
+                                "identifiers": device.identifiers,
+                                "name": device.name,
+                                "connections": device.connections,
+                            }
+    except Exception as e:
+        _LOGGER.debug(f"Could not get device info for agent {agent_name}: {e}")
+
+    return None
 
 
 def _register_services(hass: HomeAssistant):
@@ -502,11 +475,8 @@ class MemoryManager:
         self._memories: List[Dict[str, str]] = []
 
         # Ensure memory directory exists
-        try:
-            os.makedirs(self.storage_location, exist_ok=True)
-            _LOGGER.debug(f"Memory directory ready: {self.storage_location}")
-        except Exception as e:
-            _LOGGER.error(f"Failed to create memory directory: {e}")
+        from .platform_helpers import ensure_directory_exists
+        ensure_directory_exists(self.storage_location)
 
     def get_memory_file_path(self) -> str:
         """Get file path for this memory."""
@@ -514,48 +484,15 @@ class MemoryManager:
 
     def _read_file(self, file_path: str) -> List[Dict[str, str]]:
         """Read memories from file."""
-        try:
-            if os.path.exists(file_path):
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = json.load(f)
-                    if isinstance(content, list):
-                        # _LOGGER.debug(f"Loaded {len(content)} memories from {file_path}")
-                        return content
-                    else:
-                        _LOGGER.warning(f"Invalid memory format in {file_path}, expected list")
-                        return []
-        except json.JSONDecodeError as e:
-            _LOGGER.error(f"JSON decode error in {file_path}: {e}")
-            # Backup corrupted file
-            try:
-                if os.path.exists(file_path):
-                    os.rename(file_path, f"{file_path}.bak")
-                    _LOGGER.warning(f"Backed up corrupted memory file to {file_path}.bak")
-            except Exception as backup_error:
-                _LOGGER.error(f"Failed to backup corrupted file: {backup_error}")
-        except Exception as e:
-            _LOGGER.error(f"File read error ({file_path}): {e}")
-        return []
+        from .platform_helpers import read_json_file
+        return read_json_file(file_path)
 
     def _save_to_file(self, data: List[Dict[str, str]], file_path: str):
         """Save memories to file."""
-        try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+        from .platform_helpers import write_json_file
+        success = write_json_file(file_path, data)
+        if success:
             _LOGGER.debug(f"Saved {len(data)} memories to {file_path}")
-        except Exception as e:
-            _LOGGER.error(f"File write error ({file_path}): {e}")
-            # Attempt to save to a temp file to avoid data loss
-            try:
-                temp_path = f"{file_path}.tmp"
-                with open(temp_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                _LOGGER.warning(f"Saved memory to temporary file {temp_path} due to write error")
-            except Exception as temp_error:
-                _LOGGER.error(f"Failed to save to temporary file: {temp_error}")
 
     async def async_load_memories(self):
         """Load memories from file."""

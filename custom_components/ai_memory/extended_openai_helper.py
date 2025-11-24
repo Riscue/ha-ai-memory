@@ -5,9 +5,9 @@ from typing import Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
 
-_LOGGER = logging.getLogger(__name__)
+from .constants import DOMAIN
 
-DOMAIN = "ai_memory"
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_register_with_conversation(hass: HomeAssistant, manager):

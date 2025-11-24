@@ -254,10 +254,8 @@ async def test_text_setup_no_managers(hass: HomeAssistant, mock_config_entry):
     # Call setup entry
     await async_setup_entry(hass, mock_config_entry, async_add_entities)
 
-    # Verify no entities were added
-    assert async_add_entities.called
-    text_inputs = async_add_entities.call_args[0][0]
-    assert len(text_inputs) == 0
+    # Verify no entities were added (early return when no managers)
+    async_add_entities.assert_not_called()
 
 
 async def test_text_common_memory_disabled():
