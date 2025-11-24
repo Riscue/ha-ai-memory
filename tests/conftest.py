@@ -47,7 +47,7 @@ def mock_agent_manager(mock_conversation_agent):
     """Mock the conversation agent manager."""
     # Mock the entire conversation module to avoid import errors
     with patch("homeassistant.components.conversation", create=True) as mock_conversation_module, \
-         patch("homeassistant.components.conversation.get_agent_manager", create=True) as mock_get_manager:
+            patch("homeassistant.components.conversation.get_agent_manager", create=True) as mock_get_manager:
         manager = MagicMock()
         info = MagicMock()
         info.id = mock_conversation_agent.entity_id

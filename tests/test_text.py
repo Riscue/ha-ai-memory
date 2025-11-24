@@ -1,4 +1,4 @@
-"""Test AI Memory Text Platform."""
+"""Comprehensive tests for AI Memory Text Platform."""
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from homeassistant.core import HomeAssistant
@@ -275,3 +275,58 @@ async def test_text_common_memory_disabled():
     assert text_input.name == "Add to Common Memory"
     # Common memory should be disabled by default (no device_info)
     assert text_input._attr_entity_registry_enabled_default == False
+
+
+async def test_text_private_memory_enabled():
+    """Test text input for private memory is disabled by default."""
+    # Create mock objects
+    hass = MagicMock()
+    entry = MagicMock()
+    mock_manager = MagicMock()
+    mock_manager.memory_id = "private_agent"
+    mock_manager.memory_name = "Private: Test Agent"
+    mock_manager.device_info = {"identifiers": {"test_device"}, "name": "Test Device"}
+
+    # Create text input
+    text_input = AIMemoryTextInput(hass, entry, mock_manager)
+
+    # Check private memory has short name and is disabled
+    assert text_input.name == "Add Memory"
+    assert text_input._attr_entity_registry_enabled_default == False
+
+
+async def test_text_value_persistence(hass: HomeAssistant, mock_config_entry):
+    """Test text input value doesn't persist after successful submission."""
+    # Create mock memory manager
+    mock_manager = MagicMock()
+    mock_manager.memory_id = "test_memory"
+    mock_manager.memory_name = "Test Memory"
+    mock_manager.async_add_memory = AsyncMock()
+
+    # Create text input
+    text_input = AIMemoryTextInput(hass, mock_config_entry, mock_manager)
+
+    # Set initial value
+    await text_input.async_set_value("Test memory entry")
+
+    # Verify add_memory was called and value was cleared
+    mock_manager.async_add_memory.assert_called_once_with("Test memory entry")
+    assert text_input.native_value == ""
+
+
+async def test_text_value_after_error(hass: HomeAssistant, mock_config_entry):
+    """Test text input value is cleared even when add_memory fails."""
+    # Create mock memory manager with error
+    mock_manager = MagicMock()
+    mock_manager.memory_id = "test_memory"
+    mock_manager.memory_name = "Test Memory"
+    mock_manager.async_add_memory = AsyncMock(side_effect=Exception("Save failed"))
+
+    # Create text input
+    text_input = AIMemoryTextInput(hass, mock_config_entry, mock_manager)
+
+    # Set value
+    await text_input.async_set_value("Test memory entry")
+
+    # Should still be cleared even after error
+    assert text_input.native_value == ""

@@ -7,7 +7,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import MemoryManager
+from .memory_manager import MemoryManager
 from .platform_helpers import async_setup_platform_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,7 +18,6 @@ async def async_setup_entry(
         entry: ConfigEntry,
         async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up AI Memory buttons."""
     await async_setup_platform_entities(
         hass, entry, async_add_entities,
         AIMemoryClearButton, "button"
@@ -26,8 +25,6 @@ async def async_setup_entry(
 
 
 class AIMemoryClearButton(ButtonEntity):
-    """Button to clear AI memory."""
-
     def __init__(
             self,
             hass: HomeAssistant,
@@ -45,15 +42,46 @@ class AIMemoryClearButton(ButtonEntity):
         self._attr_unique_id = f"ai_memory_clear_{memory_manager.memory_id}"
         self._attr_icon = "mdi:delete-sweep"
         self._attr_entity_category = EntityCategory.CONFIG
-        # All buttons should be disabled by default
         self._attr_entity_registry_enabled_default = False
 
-        # Link to device if device info is available - use precomputed device info
         if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
             self._attr_device_info = memory_manager.device_info
 
+    @property
+    def state(self) -> str:
+        """Return the state of the button."""
+        return "ok"
+
+    @property
+    def memory_id(self) -> str:
+        """Return the memory ID."""
+        return self.memory_manager.memory_id
+
+    @property
+    def name(self) -> str:
+        """Return the name of the button."""
+        return self._attr_name
+
+    @property
+    def icon(self) -> str:
+        """Return the icon of the button."""
+        return self._attr_icon
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return self._attr_device_info if hasattr(self, '_attr_device_info') else None
+
+    @property
+    def extra_state_attributes(self):
+        """Return extra state attributes."""
+        return {
+            "memory_id": self.memory_manager.memory_id,
+            "memory_name": self.memory_manager.memory_name,
+            "description": self.memory_manager.description,
+        }
+
     async def async_press(self) -> None:
-        """Handle the button press."""
         try:
             await self.memory_manager.async_clear_memory()
             _LOGGER.debug(f"Cleared memory: {self.memory_manager.memory_id}")

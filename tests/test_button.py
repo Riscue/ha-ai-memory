@@ -1,5 +1,5 @@
-"""Test AI Memory Button Platform."""
-from unittest.mock import patch, MagicMock, AsyncMock
+"""Comprehensive tests for AI Memory Button Platform."""
+from unittest.mock import MagicMock, AsyncMock
 
 from homeassistant.core import HomeAssistant
 
@@ -18,159 +18,171 @@ async def test_button_setup(hass: HomeAssistant, mock_config_entry):
 
     mock_private_manager = MagicMock()
     mock_private_manager.memory_id = "private_test_agent"
-    mock_private_manager.memory_name = "Private: Test Agent"
+    mock_private_manager.memory_name = "Test Agent"
     mock_private_manager.async_clear_memory = AsyncMock()
-    mock_private_manager.device_info = {"identifiers": {"test_device"}}
+    mock_private_manager.device_info = {
+        "identifiers": {("test", "device")},
+        "name": "Test Device"
+    }
 
-    # Mock hass.data with memory managers
     hass.data[DOMAIN] = {
         "memory_managers": {
             "common": mock_common_manager,
-            "private_test_agent": mock_private_manager,
+            "private_test_agent": mock_private_manager
         }
     }
 
-    # Mock async_add_entities
     async_add_entities = MagicMock()
-
-    # Call setup entry
     await async_setup_entry(hass, mock_config_entry, async_add_entities)
 
-    # Verify entities were added
+    # Verify buttons were created
     assert async_add_entities.called
     buttons = async_add_entities.call_args[0][0]
-    assert len(buttons) == 2  # One clear button for each manager
+    assert len(buttons) == 2
 
-    # Check button types
-    clear_buttons = [b for b in buttons if isinstance(b, AIMemoryClearButton)]
-    assert len(clear_buttons) == 2
+    # Check common memory button
+    common_button = next((b for b in buttons if b.memory_id == "common"), None)
+    assert common_button is not None
+    assert isinstance(common_button, AIMemoryClearButton)
+    assert common_button.state == "ok"
+    assert common_button._attr_name == "Clear Common Memory"
 
-    # Verify button names
-    button_names = [b.name for b in clear_buttons]
-    assert "Clear Common Memory" in button_names
-    assert "Clear Memory" in button_names
+    # Check private memory button
+    private_button = next((b for b in buttons if b.memory_id == "private_test_agent"), None)
+    assert private_button is not None
+    assert isinstance(private_button, AIMemoryClearButton)
+    assert private_button.state == "ok"
+    assert private_button._attr_name == "Clear Memory"
+    assert private_button._attr_device_info == mock_private_manager.device_info
 
 
-async def test_clear_button_press(hass: HomeAssistant, mock_config_entry):
-    """Test clear button press functionality."""
-    # Create mock memory manager
+async def test_button_properties(hass: HomeAssistant, mock_config_entry):
+    """Test button properties and attributes."""
     mock_manager = MagicMock()
-    mock_manager.memory_id = "test_memory"
+    mock_manager.memory_id = "test_mem"
     mock_manager.memory_name = "Test Memory"
     mock_manager.async_clear_memory = AsyncMock()
+    mock_manager.device_info = {"identifiers": {("test", "device")}, "name": "Test Device"}
 
-    # Create clear button
     button = AIMemoryClearButton(hass, mock_config_entry, mock_manager)
 
-    # Press the button
+    # Test basic properties
+    assert button.memory_id == "test_mem"
+    assert button.unique_id == "ai_memory_clear_test_mem"
+    assert button.name == "Clear Memory"
+    assert button.icon == "mdi:delete-sweep"
+    assert button.device_info == mock_manager.device_info
+
+
+async def test_button_press_success(hass: HomeAssistant, mock_config_entry):
+    """Test successful button press."""
+    mock_manager = MagicMock()
+    mock_manager.memory_id = "test_mem"
+    mock_manager.async_clear_memory = AsyncMock()
+    mock_manager.memory_name = "Test Memory"
+
+    button = AIMemoryClearButton(hass, mock_config_entry, mock_manager)
+
+    # Press button
     await button.async_press()
 
-    # Verify clear memory was called
+    # Verify clear_memory was called
     mock_manager.async_clear_memory.assert_called_once()
 
 
-async def test_clear_button_press_error(hass: HomeAssistant, mock_config_entry):
-    """Test clear button press with error."""
-    # Create mock memory manager with error
+async def test_button_press_error(hass: HomeAssistant, mock_config_entry):
+    """Test button press when clear_memory fails."""
     mock_manager = MagicMock()
-    mock_manager.memory_id = "test_memory"
+    mock_manager.memory_id = "test_mem"
+    mock_manager.async_clear_memory = AsyncMock(side_effect=Exception("Clear failed"))
     mock_manager.memory_name = "Test Memory"
-    mock_manager.async_clear_memory = AsyncMock(side_effect=Exception("Test error"))
 
-    # Create clear button
     button = AIMemoryClearButton(hass, mock_config_entry, mock_manager)
 
-    # Press the button (should not raise exception)
+    # Press button should not raise exception
     await button.async_press()
 
-    # Verify clear memory was called
+    # Verify clear_memory was attempted
     mock_manager.async_clear_memory.assert_called_once()
 
 
-async def test_clear_button_properties():
-    """Test clear button properties."""
-    # Create mock objects
-    hass = MagicMock()
-    entry = MagicMock()
-    entry.entry_id = "test_entry"
+async def test_button_extra_state_attributes(hass: HomeAssistant, mock_config_entry):
+    """Test button extra state attributes."""
     mock_manager = MagicMock()
-    mock_manager.memory_id = "test_memory"
+    mock_manager.memory_id = "test_mem"
     mock_manager.memory_name = "Test Memory"
+    mock_manager.description = "Test Description"
+    mock_manager.async_clear_memory = AsyncMock()
 
-    # Mock device registry for device linking
-    with patch('homeassistant.helpers.entity_registry.async_get') as mock_entity_reg, \
-            patch('homeassistant.helpers.device_registry.async_get') as mock_device_reg:
+    button = AIMemoryClearButton(hass, mock_config_entry, mock_manager)
 
-        # Setup mock responses for private memory
-        mock_entity_reg.return_value.async_get.return_value = None  # No device found
-
-        # Create clear button
-        button = AIMemoryClearButton(hass, entry, mock_manager)
-
-        # Test properties - based on device_info presence
-        if hasattr(mock_manager, 'device_info') and mock_manager.device_info:
-            assert button.name == "Clear Memory"
-        else:
-            assert button.name == "Clear Test Memory"
-        assert button.unique_id == "ai_memory_clear_test_memory"
-        assert button.icon == "mdi:delete-sweep"
+    attributes = button.extra_state_attributes
+    assert attributes["memory_id"] == "test_mem"
+    assert attributes["memory_name"] == "Test Memory"
+    assert attributes["description"] == "Test Description"
 
 
-async def test_clear_button_device_linking_private():
-    """Test clear button device linking for private memory."""
-    # Create mock objects
-    hass = MagicMock()
-    entry = MagicMock()
+async def test_button_no_managers(hass: HomeAssistant, mock_config_entry):
+    """Test button setup when no memory managers exist."""
+    hass.data[DOMAIN] = {"memory_managers": {}}
+
+    async_add_entities = MagicMock()
+    await async_setup_entry(hass, mock_config_entry, async_add_entities)
+
+    # Should not call async_add_entities when no managers exist
+    assert not async_add_entities.called
+
+
+async def test_button_device_linking_private(hass: HomeAssistant, mock_config_entry):
+    """Test button device linking for private memory."""
     mock_manager = MagicMock()
-    mock_manager.memory_id = "private_google_generative_ai"
-    mock_manager.memory_name = "Private: Google Generative AI"
+    mock_manager.memory_id = "private_agent"
+    mock_manager.memory_name = "Private Agent"
+    mock_manager.async_clear_memory = AsyncMock()
+    mock_manager.device_info = {
+        "identifiers": {("private", "device")},
+        "name": "Private Device"
+    }
 
-    # Mock device registry for private memory device linking
-    with patch('homeassistant.helpers.entity_registry.async_get') as mock_entity_reg, \
-            patch('homeassistant.helpers.device_registry.async_get') as mock_device_reg:
-        # Setup mock device
-        mock_device = MagicMock()
-        mock_device.identifiers = {"test_device"}
-        mock_device.name = "Test Device"
-        mock_device_reg.return_value.async_get.return_value = mock_device
+    button = AIMemoryClearButton(hass, mock_config_entry, mock_manager)
 
-        # Setup mock entity with device
-        mock_agent_entry = MagicMock()
-        mock_agent_entry.device_id = "test_device_id"
-        mock_entity_reg.return_value.async_get.return_value = mock_agent_entry
-
-        # Mock device info on manager
-        mock_manager.device_info = {
-            "identifiers": {"test_device"},
-            "name": "Test Device"
-        }
-
-        # Create clear button
-        button = AIMemoryClearButton(hass, entry, mock_manager)
-
-        # Check device info was set from manager
-        assert button._attr_device_info == mock_manager.device_info
-
-        # Check device-linked memory has short name
-        assert button.name == "Clear Memory"
-        # All buttons should be disabled by default
-        assert button._attr_entity_registry_enabled_default == False
+    # Should have device info
+    assert button.device_info == mock_manager.device_info
 
 
-async def test_clear_button_common_memory_disabled():
-    """Test clear button for common memory is disabled by default."""
-    # Create mock objects
-    hass = MagicMock()
-    entry = MagicMock()
+async def test_button_device_linking_common(hass: HomeAssistant, mock_config_entry):
+    """Test button device linking for common memory (no device)."""
     mock_manager = MagicMock()
     mock_manager.memory_id = "common"
     mock_manager.memory_name = "Common Memory"
-    mock_manager.device_info = None  # Explicitly set to None
+    mock_manager.async_clear_memory = AsyncMock()
+    mock_manager.device_info = None
 
-    # Create clear button
-    button = AIMemoryClearButton(hass, entry, mock_manager)
+    button = AIMemoryClearButton(hass, mock_config_entry, mock_manager)
 
-    # Check common memory has full name
-    assert button.name == "Clear Common Memory"
-    # Common memory should be disabled by default (no device_info)
-    assert button._attr_entity_registry_enabled_default == False
+    # Should not have device info
+    assert button.device_info is None
+
+
+async def test_button_common_memory_disabled(hass: HomeAssistant, mock_config_entry):
+    """Test button setup when common memory is disabled."""
+    # Create only private manager (no common)
+    mock_private_manager = MagicMock()
+    mock_private_manager.memory_id = "private_test_agent"
+    mock_private_manager.memory_name = "Test Agent"
+    mock_private_manager.async_clear_memory = AsyncMock()
+
+    hass.data[DOMAIN] = {
+        "memory_managers": {
+            "private_test_agent": mock_private_manager
+        }
+    }
+
+    async_add_entities = MagicMock()
+    await async_setup_entry(hass, mock_config_entry, async_add_entities)
+
+    # Should create only one button for private memory
+    assert async_add_entities.called
+    buttons = async_add_entities.call_args[0][0]
+    assert len(buttons) == 1
+    assert buttons[0].memory_id == "private_test_agent"

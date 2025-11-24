@@ -2,14 +2,14 @@
 import json
 import logging
 import os
-from typing import List, Callable, TypeVar, Any, Dict
+from typing import List, Callable, TypeVar, Dict
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import MemoryManager
 from .constants import DOMAIN
+from .memory_manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,11 +17,11 @@ T = TypeVar('T')
 
 
 async def async_setup_platform_entities(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-    entity_factory: Callable[[HomeAssistant, ConfigEntry, MemoryManager], T],
-    platform_name: str
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        async_add_entities: AddEntitiesCallback,
+        entity_factory: Callable[[HomeAssistant, ConfigEntry, MemoryManager], T],
+        platform_name: str
 ) -> None:
     """Generic platform setup function for AI Memory entities."""
     memory_managers = hass.data.get(DOMAIN, {}).get("memory_managers", {})
@@ -69,7 +69,10 @@ def read_json_file(file_path: str) -> List[Dict[str, str]]:
                 return []
     except json.JSONDecodeError as e:
         _LOGGER.error(f"JSON decode error in {file_path}: {e}")
-        backup_corrupted_file(file_path)
+        try:
+            backup_corrupted_file(file_path)
+        except Exception as backup_error:
+            _LOGGER.error(f"Failed to backup corrupted file: {backup_error}")
         return []
     except Exception as e:
         _LOGGER.error(f"Error reading {file_path}: {e}")

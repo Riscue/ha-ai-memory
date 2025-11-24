@@ -7,7 +7,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import MemoryManager
+from .memory_manager import MemoryManager
 from .platform_helpers import async_setup_platform_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,7 +18,6 @@ async def async_setup_entry(
         entry: ConfigEntry,
         async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up AI Memory text inputs."""
     await async_setup_platform_entities(
         hass, entry, async_add_entities,
         AIMemoryTextInput, "text"
@@ -26,8 +25,6 @@ async def async_setup_entry(
 
 
 class AIMemoryTextInput(TextEntity):
-    """Text input to add memory entries."""
-
     def __init__(
             self,
             hass: HomeAssistant,
@@ -48,8 +45,7 @@ class AIMemoryTextInput(TextEntity):
         self._attr_mode = TextMode.TEXT
         self._attr_max = 1000
         self._attr_min = 1
-        self._attr_pattern = None
-        self._native_value = ""
+        self._attr_native_value = ""
         self._attr_entity_registry_enabled_default = False
 
         if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
@@ -57,15 +53,13 @@ class AIMemoryTextInput(TextEntity):
 
     @property
     def native_value(self) -> str:
-        """Return the value reported by the text."""
-        return self._native_value or ""
+        return self._attr_native_value or ""
 
     async def async_set_value(self, value: str) -> None:
-        """Set new value."""
         if value and value.strip():
             try:
                 await self.memory_manager.async_add_memory(value.strip())
-                self._native_value = ""
+                self._attr_native_value = ""
                 self.async_write_ha_state()
             except Exception as e:
                 _LOGGER.error(f"Failed to add memory to {self.memory_manager.memory_id}: {e}")
@@ -74,7 +68,6 @@ class AIMemoryTextInput(TextEntity):
 
     @property
     def extra_state_attributes(self):
-        """Add additional attributes for the text input."""
         return {
             "memory_id": self.memory_manager.memory_id,
             "memory_name": self.memory_manager.memory_name,

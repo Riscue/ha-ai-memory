@@ -1,3 +1,4 @@
+"""Sensor platform for AI Memory integration."""
 import logging
 from datetime import datetime
 
@@ -6,8 +7,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import MemoryManager
 from .constants import DOMAIN
+from .memory_manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,25 +18,18 @@ async def async_setup_entry(
         entry: ConfigEntry,
         async_add_entities: AddEntitiesCallback
 ):
-    """Set up AI Memory sensors."""
-    # Get all memory managers created in __init__
     memory_managers = hass.data[DOMAIN].get("memory_managers", {})
 
     sensors = []
     for manager in memory_managers.values():
-        # Create sensor for each manager
         sensor = AIMemorySensor(hass, entry, manager)
         sensors.append(sensor)
-
-        # Initialize memory
         await manager.async_load_memories()
 
     async_add_entities(sensors, True)
 
-    # Register with conversation agents
     try:
         from .extended_openai_helper import async_register_with_conversation, create_template_helper
-        # Register all managers
         for manager in memory_managers.values():
             await async_register_with_conversation(hass, manager)
 
@@ -47,8 +41,6 @@ async def async_setup_entry(
 
 
 class AIMemorySensor(SensorEntity):
-    """Representation of an AI Memory sensor."""
-
     def __init__(
             self,
             hass: HomeAssistant,
@@ -62,7 +54,6 @@ class AIMemorySensor(SensorEntity):
         self._attr_unique_id = f"ai_memory_{memory_manager.memory_id}"
         self._attr_icon = "mdi:brain"
 
-        # Link to device if device info is available
         if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
             self._attr_device_info = memory_manager.device_info
 
@@ -70,12 +61,10 @@ class AIMemorySensor(SensorEntity):
 
     @property
     def state(self):
-        """State: Memory count."""
         return len(self.memory_manager._memories)
 
     @property
     def extra_state_attributes(self):
-        """Attributes: Full text, prompt context, and metadata."""
         memories = self.memory_manager._memories
         full_text = "\n".join([f"- {m['text']}" for m in memories])
 
@@ -105,30 +94,19 @@ class AIMemorySensor(SensorEntity):
         }
 
     async def async_update(self):
-        """Fetch new state data."""
         await self.memory_manager.async_load_memories()
 
     async def async_added_to_hass(self):
-        """When entity is added to hass."""
         await self.memory_manager.async_load_memories()
 
-        # Listen for memory update events
         self.async_on_remove(
             self.hass.bus.async_listen(
                 "ai_memory_updated",
-                self._handle_memory_updated
+                self._handle_memory_update
             )
         )
 
-    async def _handle_memory_updated(self, event):
-        """Handle memory update events."""
-        memory_id = event.data.get("memory_id")
-        if memory_id == self.memory_manager.memory_id:
-            # Load the latest memories
+    async def _handle_memory_update(self, event):
+        if event.data.get("memory_id") == self.memory_manager.memory_id:
             await self.async_update()
-            # Schedule state update only if entity is properly initialized
-            try:
-                self.async_schedule_update_ha_state()
-            except Exception:
-                # In test environments or during initialization, this might fail
-                pass
+            self.async_schedule_update_ha_state()
