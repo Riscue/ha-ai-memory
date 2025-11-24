@@ -205,7 +205,72 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Setup entry update listener
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
+    # Setup late device linking after Home Assistant is fully started
+    async def late_init(_):
+        await async_setup_device_linking(hass)
+    hass.bus.async_listen_once("homeassistant_started", late_init)
+    _LOGGER.debug("Scheduled late device linking after Home Assistant startup")
+
     return True
+
+
+async def async_setup_device_linking(hass: HomeAssistant):
+    """Late initialization for device linking after all components are ready."""
+    _LOGGER.debug("Starting late device linking for AI Memory...")
+
+    memory_managers = hass.data[DOMAIN].get("memory_managers", {})
+    updated_count = 0
+
+    for memory_id, manager in memory_managers.items():
+        if memory_id.startswith("private_") and not manager.device_info:
+            # Extract agent name from memory manager
+            agent_name = manager.memory_name.replace("Private Memory: ", "")
+
+            # Try to get device info
+            device_info = None
+            try:
+                from homeassistant.helpers import entity_registry as er
+                entity_reg = er.async_get(hass)
+
+                # Try to find the device for this conversation agent
+                for reg_entry in entity_reg.entities.values():
+                    if reg_entry.domain == "conversation":
+                        state = hass.states.get(reg_entry.entity_id)
+                        if state and state.attributes.get("friendly_name") == agent_name:
+                            if reg_entry.device_id:
+                                from homeassistant.helpers import device_registry as dr
+                                device_reg = dr.async_get(hass)
+                                device = device_reg.async_get(reg_entry.device_id)
+                                if device:
+                                    device_info = {
+                                        "identifiers": device.identifiers,
+                                        "name": device.name,
+                                        "connections": device.connections,
+                                    }
+                                    _LOGGER.debug(f"Linked {agent_name} to device: {device.name}")
+                                    break
+            except Exception as e:
+                _LOGGER.debug(f"Could not get device info for agent {agent_name}: {e}")
+
+            # Update manager with device info
+            if device_info:
+                manager.device_info = device_info
+                updated_count += 1
+
+    if updated_count > 0:
+        _LOGGER.debug(f"Successfully linked {updated_count} AI Memory managers to devices")
+        # Trigger entity registry update by reloading platforms
+        try:
+            # Get the config entry
+            entries = hass.config_entries.async_entries(DOMAIN)
+            if entries:
+                entry = entries[0]  # Assume single entry
+                await hass.config_entries.async_reload(entry.entry_id)
+                _LOGGER.debug("Reloaded AI Memory entry to apply device linking")
+        except Exception as e:
+            _LOGGER.warning(f"Could not reload entry after device linking: {e}")
+    else:
+        _LOGGER.debug("No new device links found")
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry):
