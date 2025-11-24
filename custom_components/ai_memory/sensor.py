@@ -111,3 +111,24 @@ class AIMemorySensor(SensorEntity):
     async def async_added_to_hass(self):
         """When entity is added to hass."""
         await self.memory_manager.async_load_memories()
+
+        # Listen for memory update events
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "ai_memory_updated",
+                self._handle_memory_updated
+            )
+        )
+
+    async def _handle_memory_updated(self, event):
+        """Handle memory update events."""
+        memory_id = event.data.get("memory_id")
+        if memory_id == self.memory_manager.memory_id:
+            # Load the latest memories
+            await self.async_update()
+            # Schedule state update only if entity is properly initialized
+            try:
+                self.async_schedule_update_ha_state()
+            except Exception:
+                # In test environments or during initialization, this might fail
+                pass

@@ -524,6 +524,10 @@ class MemoryManager:
         await self.hass.async_add_executor_job(self._save_to_file, self._memories, file_path)
         _LOGGER.debug(f"Memory added to '{self.memory_id}': {text[:50]}...")
 
+        # Fire event to notify sensors to update
+        if hasattr(self.hass, 'bus'):
+            self.hass.bus.async_fire("ai_memory_updated", {"memory_id": self.memory_id})
+
     async def async_clear_memory(self):
         """Clear all memories."""
         count = len(self._memories)
@@ -531,3 +535,7 @@ class MemoryManager:
         file_path = self.get_memory_file_path()
         await self.hass.async_add_executor_job(self._save_to_file, [], file_path)
         _LOGGER.debug(f"Memory '{self.memory_id}' cleared ({count} entries removed)")
+
+        # Fire event to notify sensors to update
+        if hasattr(self.hass, 'bus'):
+            self.hass.bus.async_fire("ai_memory_updated", {"memory_id": self.memory_id})
