@@ -24,7 +24,7 @@ async def async_setup_entry(
     for manager in memory_managers.values():
         text_inputs.append(AIMemoryTextInput(hass, entry, manager))
 
-    _LOGGER.info(f"Creating {len(text_inputs)} AI Memory text inputs")
+    _LOGGER.debug(f"Creating {len(text_inputs)} AI Memory text inputs")
     async_add_entities(text_inputs, True)
 
 
@@ -73,7 +73,7 @@ class AIMemoryTextInput(TextEntity):
         if value and value.strip():
             try:
                 await self.memory_manager.async_add_memory(value.strip())
-                _LOGGER.info(f"Added memory entry to {self.memory_manager.memory_name}: {value[:50]}...")
+                _LOGGER.debug(f"Added memory entry to {self.memory_manager.memory_name}: {value[:50]}...")
                 self._native_value = ""  # Clear after successful submission
                 self.async_write_ha_state()
             except Exception as e:

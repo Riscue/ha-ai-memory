@@ -29,7 +29,7 @@ async def async_setup_entry(
         _LOGGER.debug(f"Creating clear button for {manager.memory_name}")
         buttons.append(AIMemoryClearButton(hass, entry, manager))
 
-    _LOGGER.info(f"Creating {len(buttons)} AI Memory buttons: {[b.name for b in buttons]}")
+    _LOGGER.debug(f"Creating {len(buttons)} AI Memory buttons: {[b.name for b in buttons]}")
     async_add_entities(buttons, True)
 
 
@@ -66,6 +66,6 @@ class AIMemoryClearButton(ButtonEntity):
         """Handle the button press."""
         try:
             await self.memory_manager.async_clear_memory()
-            _LOGGER.info(f"Cleared memory: {self.memory_manager.memory_id}")
+            _LOGGER.debug(f"Cleared memory: {self.memory_manager.memory_id}")
         except Exception as e:
             _LOGGER.error(f"Failed to clear memory {self.memory_manager.memory_id}: {e}")

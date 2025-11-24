@@ -1,6 +1,6 @@
 """Test AI Memory Init and MemoryManager."""
 import unittest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, mock_open
 
 from homeassistant.core import HomeAssistant
 
@@ -56,5 +56,3 @@ async def test_memory_manager_operations(hass: HomeAssistant):
         await manager.async_clear_memory()
         assert len(manager._memories) == 0
         mock_dump.assert_called_with([], unittest.mock.ANY, ensure_ascii=False, indent=2)
-
-

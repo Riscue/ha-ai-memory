@@ -70,18 +70,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     agent_infos = []
 
     # Get Conversation Entities
-    _LOGGER.info("Starting agent discovery for AI Memory...")
+    _LOGGER.debug("Starting agent discovery for AI Memory...")
     if conversation.DOMAIN in hass.data:
         try:
             entities = hass.data[conversation.DOMAIN].entities
-            _LOGGER.info(f"Found {len(entities)} conversation entities in hass.data")
+            _LOGGER.debug(f"Found {len(entities)} conversation entities in hass.data")
             for entity in entities:
                 # Skip if entity.name is None
                 if not entity.name:
                     _LOGGER.debug(f"Skipping entity with no name: {entity.entity_id}")
                     continue
                 agent_infos.append({"name": entity.name, "id": entity.entity_id})
-                _LOGGER.info(f"Discovered agent from entities: {entity.name} ({entity.entity_id})")
+                _LOGGER.debug(f"Discovered agent from entities: {entity.name} ({entity.entity_id})")
         except Exception as e:
             _LOGGER.warning(f"Error accessing conversation entities: {e}")
     else:
@@ -97,7 +97,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             reg_entry for reg_entry in entity_reg.entities.values()
             if reg_entry.domain == "conversation"
         ]
-        _LOGGER.info(f"Entity registry has {len(conversation_entities)} conversation entities")
+        _LOGGER.debug(f"Entity registry has {len(conversation_entities)} conversation entities")
 
         for entity_entry in conversation_entities:
             entity_id = entity_entry.entity_id
@@ -123,13 +123,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             # Avoid duplicates
             if not any(a["id"] == entity_id for a in agent_infos):
                 agent_infos.append({"name": name, "id": entity_id})
-                _LOGGER.info(f"Discovered agent from entity registry: {name} ({entity_id})")
+                _LOGGER.debug(f"Discovered agent from entity registry: {name} ({entity_id})")
             else:
                 _LOGGER.debug(f"Skipping duplicate from registry: {name} ({entity_id})")
     except Exception as e:
         _LOGGER.warning(f"Could not check entity registry: {e}")
 
-    _LOGGER.info(f"Total agents discovered: {len(agent_infos)}")
+    _LOGGER.debug(f"Total agents discovered: {len(agent_infos)}")
 
     for agent in agent_infos:
         name = agent["name"]
@@ -325,7 +325,7 @@ def _register_services(hass: HomeAssistant):
         for manager in memory_managers.values():
             if manager.memory_id == memory_id:
                 await manager.async_clear_memory()
-                _LOGGER.info(f"Memory '{memory_id}' cleared")
+                _LOGGER.debug(f"Memory '{memory_id}' cleared")
                 manager_found = True
                 break
 
@@ -520,7 +520,7 @@ class MemoryManager:
 
         file_path = self.get_memory_file_path()
         await self.hass.async_add_executor_job(self._save_to_file, self._memories, file_path)
-        _LOGGER.info(f"Memory added to '{self.memory_id}': {text[:50]}...")
+        _LOGGER.debug(f"Memory added to '{self.memory_id}': {text[:50]}...")
 
     async def async_clear_memory(self):
         """Clear all memories."""
@@ -528,4 +528,4 @@ class MemoryManager:
         self._memories = []
         file_path = self.get_memory_file_path()
         await self.hass.async_add_executor_job(self._save_to_file, [], file_path)
-        _LOGGER.info(f"Memory '{self.memory_id}' cleared ({count} entries removed)")
+        _LOGGER.debug(f"Memory '{self.memory_id}' cleared ({count} entries removed)")
