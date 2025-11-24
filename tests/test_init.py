@@ -1,6 +1,6 @@
 """Test AI Memory Init and MemoryManager."""
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 
 from homeassistant.core import HomeAssistant
 
@@ -15,9 +15,10 @@ async def test_setup_entry_creates_managers(hass: HomeAssistant, mock_config_ent
     """Test that setup creates at least common memory manager."""
     mock_config_entry.add_to_hass(hass)
 
-    # Mock platform forwarding to bypass state check in HA 2025.4+
+    # Mock conversation module to avoid import errors
     with patch("custom_components.ai_memory.MemoryManager") as mock_manager_cls, \
-            patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"):
+            patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         assert await async_setup_entry(hass, mock_config_entry)
 
         # Verify common manager created
