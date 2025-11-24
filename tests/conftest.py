@@ -1,14 +1,17 @@
 """Global fixtures for ai_memory integration."""
-import pytest
 from unittest.mock import patch, MagicMock
+
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 pytest_plugins = "pytest_homeassistant_custom_component"
+
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable custom integrations defined in the test dir."""
     yield
+
 
 @pytest.fixture
 def mock_config_entry():
@@ -22,11 +25,13 @@ def mock_config_entry():
         entry_id="test_entry_id",
     )
 
+
 @pytest.fixture
 def mock_setup_entry():
     """Mock setting up a config entry."""
     with patch("custom_components.ai_memory.async_setup_entry", return_value=True) as mock_setup:
         yield mock_setup
+
 
 @pytest.fixture
 def mock_conversation_agent():
@@ -35,6 +40,7 @@ def mock_conversation_agent():
     agent.name = "Test Agent"
     agent.entity_id = "conversation.test_agent"
     return agent
+
 
 @pytest.fixture
 def mock_agent_manager(mock_conversation_agent):

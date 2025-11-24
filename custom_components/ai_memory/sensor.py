@@ -63,29 +63,11 @@ class AIMemorySensor(SensorEntity):
         self._attr_unique_id = f"ai_memory_{memory_manager.memory_id}"
         self._attr_icon = "mdi:brain"
 
-        # Link to conversation agent device if this is a private memory
-        if memory_manager.memory_id.startswith("private_"):
-            # Extract entity_id from memory_id (e.g., private_google_generative_ai -> conversation.google_generative_ai)
-            agent_entity_id = memory_manager.memory_id.replace("private_", "")
-            # Handle both formats: entity_id style and sanitized style
-            if not agent_entity_id.startswith("conversation."):
-                agent_entity_id = f"conversation.{agent_entity_id}"
+        # Link to device if device info is available
+        if hasattr(memory_manager, 'device_info') and memory_manager.device_info:
+            self._attr_device_info = memory_manager.device_info
 
-            # Try to get device_id from entity registry
-            from homeassistant.helpers import entity_registry as er
-            entity_reg = er.async_get(hass)
-            agent_entry = entity_reg.async_get(agent_entity_id)
-
-            if agent_entry and agent_entry.device_id:
-                from homeassistant.helpers import device_registry as dr
-                device_reg = dr.async_get(hass)
-                device = device_reg.async_get(agent_entry.device_id)
-
-                if device:
-                    self._attr_device_info = {
-                        "identifiers": device.identifiers,
-                        "name": device.name,
-                    }
+        self._attr_entity_registry_enabled_default = True
 
     @property
     def state(self):

@@ -42,8 +42,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Singleton check: If managers already exist, skip initialization but still forward platform
     if hass.data[DOMAIN]["memory_managers"]:
         _LOGGER.debug("AI Memory already initialized, skipping manager creation for additional entry")
-        # Still forward to sensor platform to avoid unload errors
-        await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
+        # Still forward to platforms to avoid unload errors
+        await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.TEXT, Platform.BUTTON])
         return True
 
     # Get global settings
@@ -57,7 +57,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "Common Memory",
         "Shared memory for all agents",
         storage_location,
-        max_entries
+        max_entries,
+        device_info=None  # No device for common memory
     )
     hass.data[DOMAIN]["memory_managers"]["common"] = common_manager
     _LOGGER.debug("Initialized Common Memory")
@@ -143,16 +144,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
         memory_id = f"private_{safe_name}"
 
+        # Get device info for this agent
+        device_info = None
+        try:
+            from homeassistant.helpers import entity_registry as er
+            entity_reg = er.async_get(hass)
+
+            # Try to find the device for this conversation agent
+            for reg_entry in entity_reg.entities.values():
+                if reg_entry.domain == "conversation":
+                    state = hass.states.get(reg_entry.entity_id)
+                    if state and state.attributes.get("friendly_name") == name:
+                        if reg_entry.device_id:
+                            from homeassistant.helpers import device_registry as dr
+                            device_reg = dr.async_get(hass)
+                            device = device_reg.async_get(reg_entry.device_id)
+                            if device:
+                                device_info = {
+                                    "identifiers": device.identifiers,
+                                    "name": device.name,
+                                    "connections": device.connections,
+                                }
+                                break
+        except Exception as e:
+            _LOGGER.debug(f"Could not get device info for agent {name}: {e}")
+
         manager = MemoryManager(
             hass,
             memory_id,
-            f"Private: {name}",
+            f"Private Memory: {name}",
             f"Private memory for {name}",
             storage_location,
-            max_entries
+            max_entries,
+            device_info=device_info
         )
         hass.data[DOMAIN]["memory_managers"][memory_id] = manager
-        _LOGGER.debug(f"Initialized Private Memory for agent: {name}")
+        _LOGGER.debug(f"Initialized Private Memory for agent: {name} (device: {device_info is not None})")
 
     # Debug: Log all memory managers
     _LOGGER.debug(f"Total memory managers created: {len(hass.data[DOMAIN]['memory_managers'])}")
@@ -169,7 +196,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         _LOGGER.error(f"Entry type: {type(entry)}, this might be a Home Assistant bug!")
         return False
 
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.TEXT, Platform.BUTTON])
 
     # Register services
     _register_services(hass)
@@ -197,8 +224,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     except Exception as e:
         _LOGGER.debug(f"Could not unregister from conversation: {e}")
 
-    # Unload sensor platform
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR])
+    # Unload platforms
+    unload_ok = await hass.config_entries.async_unload_platforms(entry,
+                                                                 [Platform.SENSOR, Platform.TEXT, Platform.BUTTON])
 
     if unload_ok:
         # Remove entry reference
@@ -396,7 +424,8 @@ class MemoryManager:
             memory_name: str,
             description: str,
             storage_location: str,
-            max_entries: int
+            max_entries: int,
+            device_info: dict = None
     ):
         self.hass = hass
         self.memory_id = memory_id
@@ -404,6 +433,7 @@ class MemoryManager:
         self.description = description
         self.storage_location = storage_location
         self.max_entries = max_entries
+        self.device_info = device_info  # Device info for UI components
         self._memories: List[Dict[str, str]] = []
 
         # Ensure memory directory exists

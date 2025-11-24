@@ -1,4 +1,4 @@
-# 🧠 AI Long Term Memory
+# 🧠 AI Long Term Memory for Home Assistant
 
 [![Home Assistant](https://img.shields.io/badge/home%20assistant-%2341BDF5.svg?style=for-the-badge&logo=home-assistant&logoColor=white)](https://home-assistant.io)
 [![hacs](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/default)
@@ -12,50 +12,46 @@
 [![GitHub Release](https://img.shields.io/github/release/Riscue/ha-ai-memory.svg?style=for-the-badge)](https://github.com/Riscue/ha-ai-memory/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/Riscue/ha-ai-memory.svg?style=for-the-badge)](https://github.com/Riscue/ha-ai-memory/commits/master)
 
+![Icon](assets/logo.png)
+
+[![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ai_memory)
+
 Long-term memory system for AI assistants in Home Assistant. Store facts, preferences, and context that persists across
 conversations.
 
 ## ✨ Features
 
-- 📝 **Multiple Memories**: Create separate memory banks (Personal, Work, Shopping, etc.)
 - 🤖 **AI Integration**: Seamlessly integrates with Extended OpenAI Conversation
 - 💾 **Persistent Storage**: JSON-based storage that survives restarts
-- 🔄 **Easy Management**: Simple services to add, clear, and list memories
-- 🎯 **Config Flow**: User-friendly UI configuration
 - 📊 **Sensors**: Each memory is a sensor with rich attributes
 
-## 📦 Installation
+## 🚀 Installation
 
-### HACS (Recommended)
+### HACS Installation (Recommended)
 
-1. Open HACS
-2. Go to Integrations
-3. Click the three dots (top right)
-4. Custom repositories
-5. Add this repository URL
-6. Install "AI Memory"
-7. Restart Home Assistant
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Riscue&repository=ha-ai-memory)
 
-### Manual
+### Manual Installation
 
-1. Copy `custom_components/ai_memory` folder to your `config/custom_components/`
-2. Restart Home Assistant
-3. Go to Settings → Integrations → Add Integration
-4. Search for "AI Memory"
+1. Copy the `custom_components/ai_memory` folder into your Home Assistant `custom_components` directory.
+2. Restart Home Assistant.
+3. Add the integration from the **Integrations** page in Home Assistant. Or click the **ADD INTEGRATION** button below.
+
+[![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ai_memory)
 
 ## 🚀 Quick Start
 
-### 1. Add Your First Memory
+### 1. Use Your Memory In Conversation Context
 
-```
-Settings → Integrations → Add Integration → AI Memory
-```
+Add this to your AI Conversation prompt:
 
-- Enter memory name (e.g., "Personal")
-- Set storage location (default: `/config/ai_memory/`)
-- Set max entries (default: 1000)
+```jinja
+{{ state_attr('sensor.ai_memory_<ENTITY_ID>', 'prompt_context_snippet') }}
+```
 
 ### 2. Add Content to Memory
+
+- Manually add content to memory
 
 ```yaml
 service: ai_memory.add_memory
@@ -64,13 +60,13 @@ data:
   text: "User prefers coffee at 7 AM"
 ```
 
-### 3. Use with AI Assistant
+- Use AI Conversation to add item to memory
 
-Add this to your Extended OpenAI Conversation prompt:
+```
+You: Remember that i would like to drink coffee in the morning.
 
-```jinja
-{% set memory = state_attr('sensor.ai_memory_personal', 'prompt_context_snippet') %}
-{{ memory }}
+[Uses AddMemory Intent in the background]
+AI: Ok. I remember that.
 ```
 
 ## 📖 Services
@@ -135,22 +131,6 @@ service: ai_memory.add_memory
 data:
   memory_id: shopping
   text: "Need milk, eggs, and bread"
-```
-
-## 🤖 AI Integration
-
-### Extended OpenAI Conversation
-
-Add to your system prompt:
-
-```jinja
-{% set personal_memory = state_attr('sensor.ai_memory_personal', 'prompt_context_snippet') %}
-{% if personal_memory %}
-{{ personal_memory }}
-{% endif %}
-
-You are a helpful assistant with access to long-term memory.
-Use the memories above to provide personalized responses.
 ```
 
 ### Example Conversation
@@ -253,21 +233,6 @@ automation:
           text: "{{ trigger.slots.statement }}"
 ```
 
-## 📁 File Structure
-
-```
-custom_components/ai_memory/
-├── __init__.py                 # Main integration
-├── config_flow.py             # UI configuration
-├── sensor.py                  # Sensor platform
-├── extended_openai_helper.py  # AI integration helper
-├── conversation.py            # Conversation intents
-├── manifest.json              # Integration manifest
-├── services.yaml              # Service definitions
-└── translations/
-    └── en.json               # English translations
-```
-
 ## 🐛 Troubleshooting
 
 ### Memory not saving
@@ -281,32 +246,6 @@ custom_components/ai_memory/
 - Verify sensor state: Developer Tools → States
 - Check `prompt_context_snippet` attribute
 - Ensure prompt template includes memory
-
-### Services not appearing
-
-- Restart Home Assistant
-- Check Developer Tools → Services
-- Verify integration is loaded
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## 🙏 Credits
-
-Created for Home Assistant community
-Built with ❤️ for better AI assistants
-
-## 📮 Support
-
-- Issues: [GitHub Issues](https://github.com/yourusername/ai_memory/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/ai_memory/discussions)
-- Community: [Home Assistant Forum](https://community.home-assistant.io/)
 
 ## License
 
