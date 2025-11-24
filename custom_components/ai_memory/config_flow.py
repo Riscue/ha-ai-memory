@@ -1,10 +1,10 @@
 """Config flow for AI Memory integration."""
 import logging
 import os
-from typing import Dict, Any, Optional
 from datetime import datetime
-import voluptuous as vol
+from typing import Dict, Any, Optional
 
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
@@ -37,7 +37,7 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             storage_location = user_input.get("storage_location", self._storage_location)
-            
+
             # Create storage directory
             try:
                 os.makedirs(storage_location, exist_ok=True)
@@ -101,7 +101,7 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
                 self.config_entry,
                 data=user_input
             )
-            
+
             # Reload to apply changes
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             return self.async_create_entry(title="", data={})

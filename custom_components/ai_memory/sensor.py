@@ -21,13 +21,13 @@ async def async_setup_entry(
     """Set up AI Memory sensors."""
     # Get all memory managers created in __init__
     memory_managers = hass.data[DOMAIN].get("memory_managers", {})
-    
+
     sensors = []
     for manager in memory_managers.values():
         # Create sensor for each manager
         sensor = AIMemorySensor(hass, entry, manager)
         sensors.append(sensor)
-        
+
         # Initialize memory
         await manager.async_load_memories()
 
@@ -39,7 +39,7 @@ async def async_setup_entry(
         # Register all managers
         for manager in memory_managers.values():
             await async_register_with_conversation(hass, manager)
-            
+
         create_template_helper(hass)
     except Exception as e:
         _LOGGER.warning(f"Could not register with conversation agents: {e}")
@@ -62,7 +62,7 @@ class AIMemorySensor(SensorEntity):
         self._attr_name = f"AI Memory - {memory_manager.memory_name}"
         self._attr_unique_id = f"ai_memory_{memory_manager.memory_id}"
         self._attr_icon = "mdi:brain"
-        
+
         # Link to conversation agent device if this is a private memory
         if memory_manager.memory_id.startswith("private_"):
             # Extract entity_id from memory_id (e.g., private_google_generative_ai -> conversation.google_generative_ai)
@@ -70,17 +70,17 @@ class AIMemorySensor(SensorEntity):
             # Handle both formats: entity_id style and sanitized style
             if not agent_entity_id.startswith("conversation."):
                 agent_entity_id = f"conversation.{agent_entity_id}"
-            
+
             # Try to get device_id from entity registry
             from homeassistant.helpers import entity_registry as er
             entity_reg = er.async_get(hass)
             agent_entry = entity_reg.async_get(agent_entity_id)
-            
+
             if agent_entry and agent_entry.device_id:
                 from homeassistant.helpers import device_registry as dr
                 device_reg = dr.async_get(hass)
                 device = device_reg.async_get(agent_entry.device_id)
-                
+
                 if device:
                     self._attr_device_info = {
                         "identifiers": device.identifiers,

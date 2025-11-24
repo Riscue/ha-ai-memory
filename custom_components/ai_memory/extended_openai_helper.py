@@ -1,9 +1,8 @@
 """Helper for conversation agent integration."""
 import logging
-from typing import Optional, Any
+from typing import Optional
 
 from homeassistant.core import HomeAssistant
-from homeassistant.components import conversation
 from homeassistant.helpers import intent
 
 _LOGGER = logging.getLogger(__name__)
@@ -13,7 +12,7 @@ DOMAIN = "ai_memory"
 
 async def async_register_with_conversation(hass: HomeAssistant, manager):
     """Register memory with conversation agents."""
-    
+
     # Manager is passed directly now
     if not manager:
         _LOGGER.error("No memory manager provided for registration")
@@ -22,14 +21,14 @@ async def async_register_with_conversation(hass: HomeAssistant, manager):
     # Register conversation context provider (for all agents)
     try:
         await _register_conversation_context(hass, manager)
-        _LOGGER.info(f"Registered memory '{manager.memory_name}' with conversation agents")
+        _LOGGER.debug(f"Registered memory '{manager.memory_name}' with conversation agents")
     except Exception as e:
         _LOGGER.debug(f"Could not register conversation context: {e}")
 
     # Register intents for voice control
     try:
         await _register_memory_intents(hass, manager)
-        _LOGGER.info(f"Registered conversation intents for '{manager.memory_name}'")
+        _LOGGER.debug(f"Registered conversation intents for '{manager.memory_name}'")
     except Exception as e:
         _LOGGER.debug(f"Could not register intents: {e}")
 
@@ -183,7 +182,7 @@ async def async_unregister_from_conversation(hass: HomeAssistant, entry_id: str)
 
     if manager.memory_id in conversation_contexts:
         conversation_contexts.pop(manager.memory_id)
-        _LOGGER.info(f"Unregistered memory '{manager.memory_name}' from conversation agents")
+        _LOGGER.debug(f"Unregistered memory '{manager.memory_name}' from conversation agents")
 
 
 def create_template_helper(hass: HomeAssistant) -> None:
