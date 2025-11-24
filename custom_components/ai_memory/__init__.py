@@ -1,14 +1,13 @@
 """AI Long Term Memory component."""
-import logging
-import asyncio
-
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.const import Platform
-from homeassistant.config_entries import ConfigEntry
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Dict, List
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up AI Memory from a config entry."""
     _LOGGER.debug(f"Setting up AI Memory: {entry.title}")
     _LOGGER.debug(f"Entry ID: {entry.entry_id}, Domain: {entry.domain}, Source: {entry.source}")
-    
+
     # Ensure domain data exists
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
@@ -35,11 +34,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.data[DOMAIN]["entries"] = {}
 
     hass.data[DOMAIN]["entries"][entry.entry_id] = entry
-    
+
     # Initialize memory managers storage
     if "memory_managers" not in hass.data[DOMAIN]:
         hass.data[DOMAIN]["memory_managers"] = {}
-    
+
     # Singleton check: If managers already exist, skip initialization but still forward platform
     if hass.data[DOMAIN]["memory_managers"]:
         _LOGGER.debug("AI Memory already initialized, skipping manager creation for additional entry")
@@ -53,11 +52,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     # 1. Create Common Memory
     common_manager = MemoryManager(
-        hass, 
-        "common", 
-        "Common Memory", 
-        "Shared memory for all agents", 
-        storage_location, 
+        hass,
+        "common",
+        "Common Memory",
+        "Shared memory for all agents",
+        storage_location,
         max_entries
     )
     hass.data[DOMAIN]["memory_managers"]["common"] = common_manager
@@ -66,10 +65,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # 2. Scan for Conversation Agents and Create Private Memories
     # We need to import here to avoid circular deps if any
     from homeassistant.components import conversation
-    
+
     agent_infos = []
-    
-    # 1. Get Conversation Entities
+
+    # Get Conversation Entities
     _LOGGER.info("Starting agent discovery for AI Memory...")
     if conversation.DOMAIN in hass.data:
         try:
@@ -87,51 +86,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     else:
         _LOGGER.warning("conversation.DOMAIN not found in hass.data")
 
-    # 2. Get Agent Manager Agents
-    try:
-        # Try to import get_agent_manager (internal API)
-        from homeassistant.components.conversation import get_agent_manager
-        manager = get_agent_manager(hass)
-        agent_info_list = manager.async_get_agent_info()
-        _LOGGER.info(f"Agent manager returned {len(agent_info_list)} agents")
-        for info in agent_info_list:
-            agent_id = info.id
-            agent_name = info.name
-            
-            # If ID looks like a UUID (not entity_id format), try to find entity_id
-            if not agent_id.startswith("conversation."):
-                # Try to find corresponding entity by matching name
-                from homeassistant.helpers import entity_registry as er
-                entity_reg = er.async_get(hass)
-                for entry in entity_reg.entities.values():
-                    if entry.domain == "conversation":
-                        state = hass.states.get(entry.entity_id)
-                        if state and state.attributes.get("friendly_name") == agent_name:
-                            agent_id = entry.entity_id
-                            _LOGGER.debug(f"Mapped agent '{agent_name}' UUID to entity_id: {agent_id}")
-                            break
-            
-            # Avoid duplicates
-            if not any(a["id"] == agent_id for a in agent_infos):
-                agent_infos.append({"name": agent_name, "id": agent_id})
-                _LOGGER.info(f"Discovered agent from manager: {agent_name} ({agent_id})")
-            else:
-                _LOGGER.debug(f"Skipping duplicate agent: {agent_name} ({agent_id})")
-    except (ImportError, AttributeError) as e:
-        _LOGGER.warning(f"Could not access conversation agent manager: {e}")
-    
-    # 3. Fallback: Check entity registry for conversation entities
+    # Fallback: Check entity registry for conversation entities
     try:
         from homeassistant.helpers import entity_registry as er
         entity_reg = er.async_get(hass)
-        
+
         # Iterate through all entities and filter by domain
         conversation_entities = [
             reg_entry for reg_entry in entity_reg.entities.values()
             if reg_entry.domain == "conversation"
         ]
         _LOGGER.info(f"Entity registry has {len(conversation_entities)} conversation entities")
-        
+
         for entity_entry in conversation_entities:
             entity_id = entity_entry.entity_id
             # Get friendly name from state, fallback to original_name or platform-based name
@@ -152,7 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 else:
                     # Last resort: use entity_id
                     name = entity_id
-            
+
             # Avoid duplicates
             if not any(a["id"] == entity_id for a in agent_infos):
                 agent_infos.append({"name": name, "id": entity_id})
@@ -161,22 +127,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 _LOGGER.debug(f"Skipping duplicate from registry: {name} ({entity_id})")
     except Exception as e:
         _LOGGER.warning(f"Could not check entity registry: {e}")
-    
+
     _LOGGER.info(f"Total agents discovered: {len(agent_infos)}")
-    
+
     for agent in agent_infos:
         name = agent["name"]
-        
+
         # Skip agents with no name
         if not name:
             _LOGGER.warning(f"Skipping agent with no name: {agent['id']}")
             continue
-        
+
         # Sanitize agent name for ID
         safe_name = name.lower().replace(" ", "_").replace("-", "_")
         safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
         memory_id = f"private_{safe_name}"
-        
+
         manager = MemoryManager(
             hass,
             memory_id,
@@ -196,13 +162,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Forward setup to sensor platform
     _LOGGER.debug(f"About to forward - Entry domain: {entry.domain}, Entry ID: {getattr(entry, 'entry_id', 'N/A')}")
     _LOGGER.debug(f"Entry object type: {type(entry).__name__}, Entry title: {getattr(entry, 'title', 'N/A')}")
-    
+
     # Sanity check
     if entry.domain != DOMAIN:
         _LOGGER.error(f"CRITICAL: entry.domain is '{entry.domain}' but should be '{DOMAIN}'!")
         _LOGGER.error(f"Entry type: {type(entry)}, this might be a Home Assistant bug!")
         return False
-    
+
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
 
     # Register services
@@ -250,7 +216,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
             # This is the last entry, clean up everything
             if "memory_managers" in hass.data[DOMAIN]:
                 hass.data[DOMAIN]["memory_managers"].clear()
-            
+
             hass.services.async_remove(DOMAIN, "add_memory")
             hass.services.async_remove(DOMAIN, "clear_memory")
             hass.services.async_remove(DOMAIN, "list_memories")
@@ -268,14 +234,25 @@ def _register_services(hass: HomeAssistant):
     async def handle_add_memory(call: ServiceCall):
         """Handle add memory service call."""
         text = call.data.get("text")
-        memory_id = call.data.get("memory_id")
+        entity_id = call.data.get("memory_id")
 
         if not text:
             _LOGGER.error("No text provided for add_memory service")
             return
 
+        if not entity_id:
+            _LOGGER.error("No memory_id (entity) provided for add_memory service")
+            return
+
+        # Get memory_id from entity attributes
+        entity_state = hass.states.get(entity_id)
+        if not entity_state:
+            _LOGGER.error(f"Entity '{entity_id}' not found")
+            return
+
+        memory_id = entity_state.attributes.get("memory_id")
         if not memory_id:
-            _LOGGER.error("No memory_id provided for add_memory service")
+            _LOGGER.error(f"Entity '{entity_id}' does not have memory_id attribute")
             return
 
         # Find the memory manager for this memory_id
@@ -285,7 +262,6 @@ def _register_services(hass: HomeAssistant):
         for manager in memory_managers.values():
             if manager.memory_id == memory_id:
                 await manager.async_add_memory(text)
-                _LOGGER.info(f"Memory added to '{memory_id}': {text[:50]}...")
                 manager_found = True
                 break
 
@@ -297,10 +273,21 @@ def _register_services(hass: HomeAssistant):
 
     async def handle_clear_memory(call: ServiceCall):
         """Handle clear memory service call."""
-        memory_id = call.data.get("memory_id")
+        entity_id = call.data.get("memory_id")
 
+        if not entity_id:
+            _LOGGER.error("No memory_id (entity) provided for clear_memory service")
+            return
+
+        # Get memory_id from entity attributes
+        entity_state = hass.states.get(entity_id)
+        if not entity_state:
+            _LOGGER.error(f"Entity '{entity_id}' not found")
+            return
+
+        memory_id = entity_state.attributes.get("memory_id")
         if not memory_id:
-            _LOGGER.error("No memory_id provided for clear_memory service")
+            _LOGGER.error(f"Entity '{entity_id}' does not have memory_id attribute")
             return
 
         # Find the memory manager for this memory_id
@@ -325,7 +312,7 @@ def _register_services(hass: HomeAssistant):
         memory_managers = hass.data[DOMAIN].get("memory_managers", {})
 
         memories = []
-        
+
         for manager in memory_managers.values():
             memories.append({
                 "memory_id": manager.memory_id,
@@ -340,11 +327,26 @@ def _register_services(hass: HomeAssistant):
 
     async def handle_get_context(call: ServiceCall) -> ServiceResponse:
         """Handle get context service call - returns formatted context for debugging."""
-        memory_id = call.data.get("memory_id")
+        entity_id = call.data.get("memory_id")
 
         memory_managers = hass.data[DOMAIN].get("memory_managers", {})
 
-        if memory_id:
+        if entity_id:
+            # Get memory_id from entity attributes
+            entity_state = hass.states.get(entity_id)
+            if not entity_state:
+                return {
+                    "error": f"Entity '{entity_id}' not found",
+                    "available": [m.memory_id for m in memory_managers.values()]
+                }
+
+            memory_id = entity_state.attributes.get("memory_id")
+            if not memory_id:
+                return {
+                    "error": f"Entity '{entity_id}' does not have memory_id attribute",
+                    "available": [m.memory_id for m in memory_managers.values()]
+                }
+
             # Get specific memory context
             for manager in memory_managers.values():
                 if manager.memory_id == memory_id:
@@ -388,13 +390,13 @@ class MemoryManager:
     """Manages a single memory storage."""
 
     def __init__(
-        self, 
-        hass: HomeAssistant, 
-        memory_id: str,
-        memory_name: str,
-        description: str,
-        storage_location: str,
-        max_entries: int
+            self,
+            hass: HomeAssistant,
+            memory_id: str,
+            memory_name: str,
+            description: str,
+            storage_location: str,
+            max_entries: int
     ):
         self.hass = hass
         self.memory_id = memory_id

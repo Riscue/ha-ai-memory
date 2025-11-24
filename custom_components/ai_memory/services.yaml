@@ -1,14 +1,31 @@
+get_context:
+  name: Get Context
+  description: Get formatted memory context for conversation agents (debug)
+  fields:
+    memory_id:
+      name: Memory Sensor
+      description: Optional - select specific AI Memory sensor to get context for (omit for all)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          integration: ai_memory
+  response:
+    type: "dict"
+    required: true
+
 add_memory:
   name: Add Memory
   description: Add a new entry to a specific AI memory
   fields:
     memory_id:
-      name: Memory ID
-      description: The ID of the memory to add to (e.g., 'personal', 'work')
+      name: Memory Sensor
+      description: Select the AI Memory sensor to add to
       required: true
-      example: "personal"
       selector:
-        text:
+        entity:
+          domain: sensor
+          integration: ai_memory
     text:
       name: Text
       description: The text content to remember
@@ -23,31 +40,17 @@ clear_memory:
   description: Clear all entries from a specific AI memory
   fields:
     memory_id:
-      name: Memory ID
-      description: The ID of the memory to clear (e.g., 'personal', 'work')
+      name: Memory Sensor
+      description: Select the AI Memory sensor to clear
       required: true
-      example: "personal"
       selector:
-        text:
+        entity:
+          domain: sensor
+          integration: ai_memory
 
 list_memories:
   name: List Memories
   description: List all available AI memories with their details
-  response:
-    type: "dict"
-    required: true
-
-get_context:
-  name: Get Context
-  description: Get formatted memory context for conversation agents (debug)
-  fields:
-    memory_id:
-      name: Memory ID
-      description: Optional - specific memory ID to get context for (omit for all)
-      required: false
-      example: "personal"
-      selector:
-        text:
   response:
     type: "dict"
     required: true
