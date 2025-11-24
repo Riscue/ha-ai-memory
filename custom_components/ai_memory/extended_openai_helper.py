@@ -94,7 +94,6 @@ def get_memory_context_for_llm(manager) -> Optional[str]:
         f"This memory bank contains {len(manager._memories)} entries. "
         f"Showing the most recent {min(len(manager._memories), 20)}:\n\n"
         f"{full_text}\n\n"
-        "Use these established facts and preferences naturally in your responses.\n"
     )
 
     return context
@@ -122,10 +121,8 @@ def get_all_memory_contexts(hass: HomeAssistant) -> str:
 
     combined = (
             "\n# 🧠 AVAILABLE LONG-TERM MEMORIES\n"
-            "You have access to these persistent memories from past conversations:\n"
-            + "\n---\n".join(all_contexts) +
-            "\n---\n"
-            "Remember: Reference these memories naturally when relevant to the conversation.\n"
+            + "\n---\n".join(all_contexts)
+            + "\n---\n"
     )
 
     return combined

@@ -78,13 +78,13 @@ class AIMemorySensor(SensorEntity):
     def extra_state_attributes(self):
         """Attributes: Full text, prompt context, and metadata."""
         memories = self.memory_manager._memories
-        full_text = "\n".join([f"- {m['date']}: {m['text']}" for m in memories])
+        full_text = "\n".join([f"- {m['text']}" for m in memories])
 
         if full_text.strip():
             prompt_context_snippet = (
                 "## LONG-TERM MEMORY\n"
-                "This section contains permanent facts and preferences noted down from past conversations. "
-                "Use this context to personalize your responses and guide your actions:\n"
+                "Below are stable preferences inferred from past conversations. "
+                "Use these only when relevant and do not over-personalize responses.\n"
                 "--- MEMORY START ---\n"
                 f"{full_text}\n"
                 "--- MEMORY END ---\n"
