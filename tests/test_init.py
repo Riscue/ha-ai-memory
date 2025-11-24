@@ -977,12 +977,14 @@ async def test_setup_entry_with_conversation_entities(hass: HomeAssistant, mock_
     mock_conversation_data = MagicMock()
     mock_conversation_data.entities = [mock_entity]
     
-    # Setup hass.data with conversation
-    hass.data["conversation"] = mock_conversation_data
-    
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
-            patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+            patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}), \
+            patch("homeassistant.components.conversation.DOMAIN", "conversation"):
+        # Setup hass.data with conversation using the mocked DOMAIN
+        hass.data["conversation"] = mock_conversation_data
+        
         # Mock empty entity registry
         mock_er.return_value.entities.values.return_value = []
         
@@ -1009,7 +1011,8 @@ async def test_setup_entry_entity_with_no_name(hass: HomeAssistant, mock_config_
     
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
-            patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+            patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         mock_er.return_value.entities.values.return_value = []
         
         result = await async_setup_entry(hass, mock_config_entry)
@@ -1031,7 +1034,8 @@ async def test_setup_entry_conversation_error(hass: HomeAssistant, mock_config_e
     
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
-            patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+            patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         mock_er.return_value.entities.values.return_value = []
         
         result = await async_setup_entry(hass, mock_config_entry)
@@ -1046,7 +1050,8 @@ async def test_setup_entry_no_conversation_domain(hass: HomeAssistant, mock_conf
     
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
-            patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+            patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         mock_er.return_value.entities.values.return_value = []
         
         result = await async_setup_entry(hass, mock_config_entry)
@@ -1072,7 +1077,8 @@ async def test_setup_entry_entity_registry_fallback(hass: HomeAssistant, mock_co
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
             patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
-            patch.object(hass, "states") as mock_states:
+            patch.object(hass, "states") as mock_states, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         mock_er.return_value.entities.values.return_value = [mock_reg_entry]
         mock_states.get.return_value = mock_state
         
@@ -1098,7 +1104,8 @@ async def test_setup_entry_name_from_platform(hass: HomeAssistant, mock_config_e
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
             patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
-            patch.object(hass, "states") as mock_states:
+            patch.object(hass, "states") as mock_states, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         mock_er.return_value.entities.values.return_value = [mock_reg_entry]
         mock_states.get.return_value = None
         
@@ -1131,7 +1138,8 @@ async def test_setup_entry_duplicate_agent_handling(hass: HomeAssistant, mock_co
     
     with patch("custom_components.ai_memory.memory_manager.MemoryManager") as mock_manager_cls, \
             patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"), \
-            patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+            patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
+            patch.dict("sys.modules", {"homeassistant.components.conversation": MagicMock()}):
         mock_er.return_value.entities.values.return_value = [mock_reg_entry]
         
         result = await async_setup_entry(hass, mock_config_entry)
