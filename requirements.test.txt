@@ -1,10 +1,10 @@
 wheel==0.45.1
-numpy==2.2.2
+numpy==2.3.2
 
-pytest==8.3.5
-pytest-cov==6.0.0
-pytest-asyncio==0.26.0
+pytest==8.4.2
+pytest-cov==7.0.0
+pytest-asyncio==1.2.0
 pytest-aiohttp==1.1.0
 
-homeassistant==2025.4.4
-pytest-homeassistant-custom-component==0.13.236
+homeassistant==2025.11.3
+pytest-homeassistant-custom-component==0.13.297
