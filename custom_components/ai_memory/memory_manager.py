@@ -19,7 +19,8 @@ class MemoryManager:
             description: str,
             storage_location: str,
             max_entries: int,
-            device_info: dict = None
+            device_info: dict = None,
+            agent_id: str = None
     ):
         self.hass = hass
         self.memory_id = memory_id
@@ -28,6 +29,7 @@ class MemoryManager:
         self.storage_location = storage_location
         self.max_entries = max_entries
         self.device_info = device_info  # Device info for UI components
+        self.agent_id = agent_id  # ID of the conversation agent this memory belongs to
         self._memories: List[Dict[str, str]] = []
 
         # Ensure memory directory exists

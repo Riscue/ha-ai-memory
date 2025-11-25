@@ -145,7 +145,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             f"Private memory for {name}",
             storage_location,
             max_entries,
-            device_info=device_info
+            device_info=device_info,
+            agent_id=agent["id"]
         )
         hass.data[DOMAIN]["memory_managers"][memory_id] = manager
         _LOGGER.debug(f"Initialized Private Memory for agent: {name} (device: {device_info is not None})")

@@ -7,7 +7,7 @@ from custom_components.ai_memory import DOMAIN
 from custom_components.ai_memory.extended_openai_helper import (
     async_register_with_conversation,
     _register_conversation_context,
-    _register_memory_intents,
+    async_ensure_add_memory_intent,
     get_memory_context_for_llm,
     get_all_memory_contexts,
     get_memory_prompt_injection,
@@ -134,7 +134,7 @@ async def test_register_with_conversation_intents_error(hass: HomeAssistant):
     manager = MagicMock()
     manager.memory_name = "Test Memory"
 
-    with patch('custom_components.ai_memory.extended_openai_helper._register_memory_intents',
+    with patch('custom_components.ai_memory.extended_openai_helper.async_ensure_add_memory_intent',
                side_effect=Exception("Intents error")):
         await async_register_with_conversation(hass, manager)
         # Should handle error gracefully
@@ -167,28 +167,183 @@ async def test_register_conversation_context_with_existing_domain(hass: HomeAssi
     assert "test_mem" in hass.data[DOMAIN]["conversation_contexts"]
 
 
-async def test_register_memory_intents_with_slots(hass: HomeAssistant):
-    """Test intent registration with text slots."""
-    manager = MagicMock()
-    manager.memory_id = "test_memory"
-    manager.memory_name = "Test Memory"
-    manager.description = "Test Description"
-    manager.async_add_memory = AsyncMock()
+async def test_add_memory_intent(hass: HomeAssistant):
+    """Test AddMemory intent logic."""
+    # Setup managers
+    manager_common = MagicMock()
+    manager_common.memory_id = "common"
+    manager_common.memory_name = "Common Memory"
+    manager_common.async_add_memory = AsyncMock()
 
-    await _register_memory_intents(hass, manager)
+    manager_work = MagicMock()
+    manager_work.memory_id = "work"
+    manager_work.memory_name = "Work Memory"
+    manager_work.async_add_memory = AsyncMock()
 
-    # Verify intent was registered by checking it can handle an intent
-    intent_type = f"Add{manager.memory_id.title()}Memory"
+    hass.data[DOMAIN] = {
+        "memory_managers": {
+            "common": manager_common,
+            "work": manager_work
+        }
+    }
 
-    # Mock intent with text slot
-    mock_intent = MagicMock()
-    mock_intent.slots = {"text": {"value": "Remember this"}}
-    mock_intent.create_response = MagicMock(return_value={"speech": {"plain": {"speech": "Added"}}})
+    # Register intent
+    await async_ensure_add_memory_intent(hass)
 
-    # Find and call the intent handler
+    # We need to capture the registered intent handler
+    # Since we can't easily access the intent registry in tests without full HA setup,
+    # we'll mock intent.async_register to capture the handler instance
     with patch('homeassistant.helpers.intent.async_register') as mock_register:
-        await _register_memory_intents(hass, manager)
-        mock_register.assert_called_once()
+        await async_ensure_add_memory_intent(hass)
+        # Get the handler instance passed to async_register
+        args, _ = mock_register.call_args
+        handler = args[1]
+
+        # Helper to mock response
+        def mock_create_response():
+            response = MagicMock()
+            response.async_set_speech = MagicMock()
+            return response
+
+        # Test 1: Add to shared memory (shared=True)
+        intent_obj = MagicMock()
+        intent_obj.slots = {"text": {"value": "Remember this"}, "shared": {"value": True}}
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        await handler.async_handle(intent_obj)
+        manager_common.async_add_memory.assert_called_with("Remember this")
+        manager_work.async_add_memory.assert_not_called()
+        manager_common.async_add_memory.reset_mock()
+
+        # Test 2: Add to private memory (shared=False)
+        intent_obj.slots = {"text": {"value": "Remember this"}, "shared": {"value": False}}
+        intent_obj.conversation_agent_id = "agent_work"
+        manager_work.agent_id = "agent_work"
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        await handler.async_handle(intent_obj)
+        manager_work.async_add_memory.assert_called_with("Remember this")
+        manager_common.async_add_memory.assert_not_called()
+        manager_work.async_add_memory.reset_mock()
+
+        # Test 3: Add to private memory (shared missing, default to private)
+        intent_obj.slots = {"text": {"value": "Remember this"}}
+        intent_obj.conversation_agent_id = "agent_work"
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        await handler.async_handle(intent_obj)
+        manager_work.async_add_memory.assert_called_with("Remember this")
+        manager_work.async_add_memory.reset_mock()
+
+        # Test 4: Default to private memory via platform fallback (Entity Registry - Single Match)
+        intent_obj.slots = {"text": {"value": "Remember this"}}
+        intent_obj.conversation_agent_id = None
+        intent_obj.platform = "google_generative_ai_conversation"
+        manager_work.agent_id = "conversation.google_ai_conversation"
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        # Mock Entity Registry - Single Match
+        with patch('homeassistant.helpers.entity_registry.async_get') as mock_er_get:
+            mock_registry = MagicMock()
+            mock_entry = MagicMock()
+            mock_entry.domain = "conversation"
+            mock_entry.platform = "google_generative_ai_conversation"
+            mock_entry.entity_id = "conversation.google_ai_conversation"
+            mock_registry.entities.values.return_value = [mock_entry]
+            mock_er_get.return_value = mock_registry
+            
+            await handler.async_handle(intent_obj)
+            manager_work.async_add_memory.assert_called_with("Remember this")
+            manager_work.async_add_memory.reset_mock()
+
+        # Test 5: Ambiguous platform resolution (Multiple Matches)
+        intent_obj.slots = {"text": {"value": "Remember this"}}
+        intent_obj.conversation_agent_id = None
+        intent_obj.platform = "ambiguous_platform"
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        with patch('homeassistant.helpers.entity_registry.async_get') as mock_er_get:
+            mock_registry = MagicMock()
+            mock_entry1 = MagicMock()
+            mock_entry1.domain = "conversation"
+            mock_entry1.platform = "ambiguous_platform"
+            mock_entry1.entity_id = "conversation.agent_1"
+            
+            mock_entry2 = MagicMock()
+            mock_entry2.domain = "conversation"
+            mock_entry2.platform = "ambiguous_platform"
+            mock_entry2.entity_id = "conversation.agent_2"
+            
+            mock_registry.entities.values.return_value = [mock_entry1, mock_entry2]
+            mock_er_get.return_value = mock_registry
+            
+            # Case 5a: True Ambiguity (Both have memories)
+            # Create a manager for agent_2 as well
+            manager_agent2 = AsyncMock()
+            manager_agent2.memory_id = "private_agent_2"
+            manager_agent2.agent_id = "conversation.agent_2"
+            
+            # Update hass.data with both managers
+            hass.data[DOMAIN]["memory_managers"] = {
+                "work": manager_work, 
+                "private_agent_2": manager_agent2
+            }
+            
+            # Ensure mock entries match these managers
+            mock_entry1.entity_id = "conversation.google_ai_conversation" # Matches manager_work
+            mock_entry2.entity_id = "conversation.agent_2" # Matches manager_agent2
+            
+            await handler.async_handle(intent_obj)
+            manager_work.async_add_memory.assert_not_called()
+            manager_agent2.async_add_memory.assert_not_called()
+            # Should fail resolution
+            
+            # Case 5b: Resolved Ambiguity (Only one has memory)
+            # Remove manager_agent2, so only manager_work (agent_id="conversation.google_ai_conversation") exists?
+            # Wait, manager_work has agent_id="conversation.google_ai_conversation".
+            # Let's adjust the mock entries to match available managers.
+            
+            mock_entry1.entity_id = "conversation.google_ai_conversation" # Matches manager_work
+            mock_entry2.entity_id = "conversation.other_agent" # No manager
+            
+            # Reset managers to just work and common
+            hass.data[DOMAIN]["memory_managers"] = {"work": manager_work, "common": manager_common}
+            
+            await handler.async_handle(intent_obj)
+            manager_work.async_add_memory.assert_called_with("Remember this")
+            manager_work.async_add_memory.reset_mock()
+
+        # Test 6: Error - Shared requested but not available
+        hass.data[DOMAIN]["memory_managers"] = {"work": manager_work}
+        intent_obj.slots = {"text": {"value": "Remember this"}, "shared": {"value": True}}
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        await handler.async_handle(intent_obj)
+        manager_work.async_add_memory.assert_not_called()
+        # Should return error response about shared memory not available
+
+        # Test 7: Error - Private requested but not found
+        hass.data[DOMAIN]["memory_managers"] = {"common": manager_common}
+        intent_obj.slots = {"text": {"value": "Remember this"}, "shared": {"value": False}}
+        intent_obj.conversation_agent_id = "unknown_agent"
+        intent_obj.platform = "unknown_platform"
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        
+        # Mock Entity Registry returning no match
+        with patch('homeassistant.helpers.entity_registry.async_get') as mock_er_get:
+            mock_registry = MagicMock()
+            mock_registry.entities.values.return_value = []
+            mock_er_get.return_value = mock_registry
+            
+            await handler.async_handle(intent_obj)
+            manager_common.async_add_memory.assert_not_called()
+            # Should return error response about private memory not found
+
+        # Test 8: Error - No text
+        intent_obj.slots = {}
+        intent_obj.create_response = MagicMock(side_effect=mock_create_response)
+        await handler.async_handle(intent_obj)
+        manager_common.async_add_memory.assert_not_called()
 
 
 def test_get_memory_context_for_llm_empty_memories():
