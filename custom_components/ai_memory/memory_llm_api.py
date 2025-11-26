@@ -1,7 +1,7 @@
 """LLM API for Memory Management."""
 import logging
 
-import homeassistant.components.llm as llm
+import homeassistant.helpers.llm as llm
 import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.util.json import JsonObjectType
@@ -22,7 +22,13 @@ class AddMemoryTool(llm.Tool):
     """Tool to add information to memory."""
 
     name = "add_memory"
-    description = "Add information to long-term memory. Use 'private' scope for user-specific facts, 'common' for general facts shared with other assistants."
+    description = """
+    CRITICAL: Use this tool PROACTIVELY. Do not wait for the user to say "save this".
+    If the user mentions a personal fact (e.g., "I'm a fan of Fenerbahçe", "My name is Ebru"), a future plan, a preference, or a specific rule for the house, save it IMMEDIATELY.
+    - Use 'private' scope (default) for personal details to build a unique bond with the user.
+    - Use 'common' scope ONLY if the information is a general fact about the house (e.g., "The garage door is broken") that all assistants must know.
+    """
+
     parameters = vol.Schema({
         vol.Required("content"): str,
         vol.Optional("scope", default="private"): vol.In(["private", "common"]),
@@ -36,6 +42,7 @@ class AddMemoryTool(llm.Tool):
     ) -> JsonObjectType:
         content = tool_input.tool_args.get("content")
         scope = tool_input.tool_args.get("scope", "private")
+        _LOGGER.debug(f"AI Memory (search_memory): {scope} - {content}")
 
         # Determine agent_id
         agent_id = llm_context.assistant
@@ -55,7 +62,12 @@ class SearchMemoryTool(llm.Tool):
     """Tool to search memory."""
 
     name = "search_memory"
-    description = "Search through long-term memory (both private and common)."
+    description = """
+    Use this tool whenever the user refers to past events, asks a question requiring personal context, or uses vague references like "it", "that thing", or "my team".
+    BEFORE answering a personal question (e.g., "What was my plan?", "Do you remember me?"), ALWAYS search memory first.
+    This tool searches both your 'private' memories and the 'common' house knowledge base.
+    """
+
     parameters = vol.Schema({
         vol.Required("query"): str,
     })
@@ -68,6 +80,7 @@ class SearchMemoryTool(llm.Tool):
     ) -> JsonObjectType:
         query = tool_input.tool_args.get("query")
         agent_id = llm_context.assistant
+        _LOGGER.debug(f"AI Memory (search_memory): {query}")
 
         try:
             results = await self.memory_manager.async_search_memory(query, agent_id)

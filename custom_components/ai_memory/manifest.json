@@ -7,6 +7,7 @@
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/Riscue/ha-ai-memory",
+  "homeassistant": "2025.11.3",
   "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Riscue/ha-ai-memory/issues",

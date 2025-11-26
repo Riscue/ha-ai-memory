@@ -13,6 +13,34 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+@pytest.fixture(autouse=True)
+async def mock_llm_integration(hass):
+    """Mock the llm integration."""
+    from pytest_homeassistant_custom_component.common import (
+        MockModule,
+        mock_integration,
+    )
+    from unittest.mock import AsyncMock
+    import sys
+
+    # Create a mock integration object
+    mock_integration(
+        hass,
+        MockModule(
+            "llm",
+            async_setup=AsyncMock(return_value=True),
+        ),
+    )
+
+    # Mock the llm component module in sys.modules
+    llm_module = type(sys)("llm")
+    llm_module.async_setup = AsyncMock(return_value=True)
+    llm_module.async_setup_entry = AsyncMock(return_value=True)
+
+    with patch.dict(sys.modules, {"homeassistant.components.llm": llm_module}):
+        yield
+
+
 @pytest.fixture
 def mock_config_entry():
     """Mock a config entry."""
