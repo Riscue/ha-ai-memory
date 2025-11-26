@@ -1,5 +1,6 @@
 wheel==0.45.1
 numpy==2.3.2
+sentence-transformers>=2.2.2
 
 pytest==8.4.2
 pytest-cov==7.0.0
