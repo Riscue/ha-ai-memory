@@ -24,7 +24,7 @@ async def test_form(hass: HomeAssistant) -> None:
             result["flow_id"],
             {
                 "max_entries": 500,
-                "embedding_engine": "fastembed",
+                "embedding_engine": "tfidf",
             },
         )
         await hass.async_block_till_done()
@@ -32,7 +32,7 @@ async def test_form(hass: HomeAssistant) -> None:
     assert result2["type"] == FlowResultType.CREATE_ENTRY
     assert result2["title"] == "AI Memory"
     assert result2["data"]["max_entries"] == 500
-    assert result2["data"]["embedding_engine"] == "fastembed"
+    assert result2["data"]["embedding_engine"] == "tfidf"
     assert len(mock_setup_entry.mock_calls) == 1
 
 

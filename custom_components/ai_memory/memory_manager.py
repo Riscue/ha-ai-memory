@@ -7,7 +7,8 @@ from typing import List, Dict, Optional, Any
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory import ENGINE_AUTO
+from custom_components.ai_memory import ENGINE_TFIDF
+from custom_components.ai_memory.constants import DOMAIN, MEMORY_MAX_ENTRIES
 from custom_components.ai_memory.constants import DEFAULT_STORAGE_PATH
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,8 +20,9 @@ class MemoryManager:
     def __init__(
             self,
             hass: HomeAssistant,
-            engine_type: str = ENGINE_AUTO,
-            max_entries: int = 1000
+            engine_type: str = ENGINE_TFIDF,
+            max_entries: int = MEMORY_MAX_ENTRIES,
+            config_data: dict = None
     ):
         self.hass = hass
         self._embedding_engine = None
@@ -28,7 +30,7 @@ class MemoryManager:
 
         # Initialize embedding engine
         from .embedding import EmbeddingEngine
-        self._embedding_engine = EmbeddingEngine(hass, engine_type)
+        self._embedding_engine = EmbeddingEngine(hass, engine_type, config_data)
 
         # Initialize DB
         self.db_path = DEFAULT_STORAGE_PATH

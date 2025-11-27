@@ -10,11 +10,10 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 
+from . import MEMORY_MAX_ENTRIES
 from .constants import (
     DOMAIN,
-    ENGINE_AUTO,
-    ENGINE_FASTEMBED,
-    ENGINE_SENTENCE_TRANSFORMER,
+    ENGINE_REMOTE,
     ENGINE_TFIDF,
     ENGINE_NAMES,
 )
@@ -22,6 +21,8 @@ from .constants import (
 _LOGGER = logging.getLogger(__name__)
 
 CONF_EMBEDDING_ENGINE = "embedding_engine"
+CONF_REMOTE_URL = "remote_url"
+CONF_MODEL_NAME = "model_name"
 
 
 class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -31,7 +32,8 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self):
         """Initialize config flow."""
-        self._default_max_entries = 1000
+        self._default_max_entries = MEMORY_MAX_ENTRIES
+        self._user_input = {}
 
     async def async_step_user(
             self, user_input: Optional[Dict[str, Any]] = None
@@ -44,12 +46,16 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
+            self._user_input = user_input
+            if user_input.get("embedding_engine") == ENGINE_REMOTE:
+                return await self.async_step_remote_config()
+
             if not errors:
                 return self.async_create_entry(
                     title="AI Memory",
                     data={
                         "max_entries": user_input.get("max_entries", self._default_max_entries),
-                        "embedding_engine": user_input.get("embedding_engine", ENGINE_AUTO),
+                        "embedding_engine": user_input.get("embedding_engine", ENGINE_TFIDF),
                         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     }
                 )
@@ -61,12 +67,46 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10000)),
             vol.Optional(
                 "embedding_engine",
-                default=ENGINE_AUTO
+                default=ENGINE_REMOTE
             ): vol.In(ENGINE_NAMES),
         })
 
         return self.async_show_form(
             step_id="user",
+            data_schema=schema,
+            errors=errors
+        )
+
+    async def async_step_remote_config(
+            self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle remote configuration step."""
+        errors = {}
+
+        if user_input is not None:
+            # Merge with initial input
+            data = {
+                "max_entries": self._user_input.get("max_entries", self._default_max_entries),
+                "embedding_engine": self._user_input.get("embedding_engine"),
+                "remote_url": user_input.get(CONF_REMOTE_URL),
+                "model_name": user_input.get(CONF_MODEL_NAME),
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            return self.async_create_entry(title="AI Memory", data=data)
+
+        schema = vol.Schema({
+            vol.Required(
+                CONF_REMOTE_URL,
+                default="http://localhost:8000"
+            ): str,
+            vol.Optional(
+                CONF_MODEL_NAME,
+                default="qllama/bge-small-en-v1.5:q8_0"
+            ): str,
+        })
+
+        return self.async_show_form(
+            step_id="remote_config",
             data_schema=schema,
             errors=errors
         )
@@ -86,6 +126,7 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry):
         """Initialize options flow."""
         self.config_entry = config_entry
+        self._user_input = {}
 
     async def async_step_init(
             self, user_input: Optional[Dict[str, Any]] = None
@@ -94,6 +135,10 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
+            self._user_input = user_input
+            if user_input.get("embedding_engine") == ENGINE_REMOTE:
+                return await self.async_step_remote_config()
+
             # Update the entry
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
@@ -109,12 +154,51 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
             data_schema=vol.Schema({
                 vol.Required(
                     "max_entries",
-                    default=self.config_entry.data.get("max_entries", 1000)
+                    default=self.config_entry.data.get("max_entries", MEMORY_MAX_ENTRIES)
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10000)),
                 vol.Optional(
                     "embedding_engine",
-                    default=self.config_entry.data.get("embedding_engine", ENGINE_AUTO)
+                    default=self.config_entry.data.get("embedding_engine", ENGINE_REMOTE)
                 ): vol.In(ENGINE_NAMES),
             }),
+            errors=errors
+        )
+
+    async def async_step_remote_config(
+            self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle remote configuration step."""
+        errors = {}
+
+        if user_input is not None:
+            # Merge with initial input
+            data = {
+                "max_entries": self._user_input.get("max_entries"),
+                "embedding_engine": self._user_input.get("embedding_engine"),
+                "remote_url": user_input.get(CONF_REMOTE_URL),
+                "model_name": user_input.get(CONF_MODEL_NAME),
+            }
+            
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data=data
+            )
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_create_entry(title="", data={})
+
+        schema = vol.Schema({
+            vol.Required(
+                CONF_REMOTE_URL,
+                default=self.config_entry.data.get("remote_url", "http://localhost:8000")
+            ): str,
+            vol.Optional(
+                CONF_MODEL_NAME,
+                default=self.config_entry.data.get("model_name", "qllama/bge-small-en-v1.5:q8_0")
+            ): str,
+        })
+
+        return self.async_show_form(
+            step_id="remote_config",
+            data_schema=schema,
             errors=errors
         )

@@ -5,11 +5,8 @@ from typing import List, Optional
 from homeassistant.core import HomeAssistant
 
 from custom_components.ai_memory.constants import (
-    ENGINE_AUTO,
-    ENGINE_FASTEMBED,
-    ENGINE_SENTENCE_TRANSFORMER,
+    ENGINE_REMOTE,
     ENGINE_TFIDF,
-    ENGINE_FALLBACK_ORDER,
     EMBEDDINGS_VECTOR_DIM,
 )
 
@@ -20,20 +17,21 @@ class EmbeddingEngine:
     """Engine to generate vector embeddings from text with multiple backends.
     
     Supports multiple embedding engines with automatic fallback:
-    1. SentenceTransformer (Best Quality)
-    2. FastEmbed (Good Quality, RPi4 Optimized)
-    3. TF-IDF (Lightweight, No Dependencies)
+    1. Remote Service (Recommended)
+    2. TF-IDF (Lightweight, No Dependencies)
     """
 
-    def __init__(self, hass: HomeAssistant, engine_type: str = ENGINE_AUTO):
+    def __init__(self, hass: HomeAssistant, engine_type: str = ENGINE_TFIDF, config_data: dict = None):
         """Initialize the embedding engine.
         
         Args:
             hass: Home Assistant instance
-            engine_type: Engine type to use (auto, sentence_transformer, fastembed, tfidf)
+            engine_type: Engine type to use (remote, tfidf)
+            config_data: Configuration data (for remote engine)
         """
         self.hass = hass
         self._engine_type = engine_type
+        self._config_data = config_data or {}
         self._engine = None
         self._engine_name = None
         self._initialized = False
@@ -41,17 +39,13 @@ class EmbeddingEngine:
     def _create_engine(self, engine_type: str):
         """Create specific engine instance."""
         try:
-            if engine_type == ENGINE_SENTENCE_TRANSFORMER:
-                from .embedding_sentence_transformer import SentenceTransformerEngine
-                return SentenceTransformerEngine(self.hass)
-
-            elif engine_type == ENGINE_FASTEMBED:
-                from .embedding_fastembed import FastEmbedEngine
-                return FastEmbedEngine(self.hass)
-
-            elif engine_type == ENGINE_TFIDF:
+            if engine_type == ENGINE_TFIDF:
                 from .embedding_tfidf import TFIDFEmbeddingEngine
                 return TFIDFEmbeddingEngine(self.hass, EMBEDDINGS_VECTOR_DIM)
+
+            elif engine_type == ENGINE_REMOTE:
+                from .embedding_remote import RemoteEmbeddingEngine
+                return RemoteEmbeddingEngine(self.hass, self._config_data)
 
         except ImportError as e:
             _LOGGER.debug("Engine %s import failed: %s", engine_type, e)
@@ -86,7 +80,7 @@ class EmbeddingEngine:
             return False
 
     def _initialize_engine(self):
-        """Initialize the embedding engine with fallback support."""
+        """Initialize the embedding engine with strict fallback to TF-IDF."""
         if self._initialized:
             return
 
@@ -94,23 +88,22 @@ class EmbeddingEngine:
 
         success = False
 
-        # Specific engine requested
-        if self._engine_type != ENGINE_AUTO:
-            if self._try_initialize_engine(self._engine_type):
-                success = True
-            else:
-                _LOGGER.warning(
-                    "Requested engine '%s' failed. Falling back to AUTO.",
-                    self._engine_type
-                )
-                # Fall through to AUTO logic
-
-        # AUTO mode (or fallback from failed specific engine)
-        if not success:
-            for engine_type in ENGINE_FALLBACK_ORDER:
-                if self._try_initialize_engine(engine_type):
+        # 1. Try requested engine
+        if self._try_initialize_engine(self._engine_type):
+            success = True
+        else:
+            _LOGGER.warning(
+                "Requested engine '%s' failed. Falling back to TF-IDF.",
+                self._engine_type
+            )
+            
+            # 2. Strict Fallback to TF-IDF
+            # Only if the requested engine was NOT TF-IDF (to avoid infinite loop or redundant check)
+            if self._engine_type != ENGINE_TFIDF:
+                if self._try_initialize_engine(ENGINE_TFIDF):
                     success = True
-                    break
+                else:
+                    _LOGGER.error("Fallback to TF-IDF failed.")
 
         if not success:
             raise RuntimeError("No embedding engine available. Please check logs.")

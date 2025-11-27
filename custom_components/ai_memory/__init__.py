@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory.constants import DOMAIN, ENGINE_AUTO
+from custom_components.ai_memory.constants import DOMAIN, ENGINE_TFIDF, MEMORY_MAX_ENTRIES
 from custom_components.ai_memory.memory_manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,10 +28,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         return True
 
     # Initialize Single Memory Manager
-    engine_type = entry.data.get("embedding_engine", ENGINE_AUTO)
-    max_entries = entry.data.get("max_entries", 1000)
+    engine_type = entry.data.get("embedding_engine", ENGINE_TFIDF)
+    max_entries = entry.data.get("max_entries", MEMORY_MAX_ENTRIES)
 
-    manager = MemoryManager(hass, engine_type, max_entries)
+    manager = MemoryManager(hass, engine_type, max_entries, entry.data)
     await manager.async_load_memories()
 
     # Initialize embedding engine (installs dependencies if needed)
