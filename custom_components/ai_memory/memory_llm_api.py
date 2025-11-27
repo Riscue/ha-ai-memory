@@ -15,7 +15,11 @@ API_ID = "memory_api"
 
 async def async_setup(hass: HomeAssistant):
     """Set up the Memory LLM API."""
-    llm.async_register_api(hass, MemoryAPI(hass))
+    try:
+        llm.async_register_api(hass, MemoryAPI(hass))
+    except Exception as e:
+        # Ignore if already registered (e.g. during reload)
+        _LOGGER.debug("Memory LLM API registration skipped: %s", e)
 
 
 class AddMemoryTool(llm.Tool):

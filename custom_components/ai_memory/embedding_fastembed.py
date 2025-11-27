@@ -8,6 +8,8 @@ from homeassistant.core import HomeAssistant
 _LOGGER = logging.getLogger(__name__)
 
 
+from homeassistant.util.package import install_package
+
 class FastEmbedEngine:
     """FastEmbed embedding engine (ONNX-based, optimized for RPi4)."""
 
@@ -21,6 +23,16 @@ class FastEmbedEngine:
         """Load FastEmbed model (downloads on first use)."""
         if self._model_loaded:
             return
+
+        try:
+            import fastembed
+        except ImportError:
+            _LOGGER.info("fastembed not found, installing...")
+            try:
+                install_package("fastembed")
+                import fastembed
+            except Exception as e:
+                raise RuntimeError(f"Failed to install fastembed: {e}")
 
         try:
             from fastembed import TextEmbedding
@@ -38,11 +50,6 @@ class FastEmbedEngine:
             self._model_loaded = True
             _LOGGER.debug("FastEmbed model loaded successfully")
             
-        except ImportError:
-            raise RuntimeError(
-                "fastembed not installed. "
-                "Please install it manually: pip install fastembed"
-            )
         except Exception as e:
             raise RuntimeError(f"Failed to load FastEmbed: {e}")
 

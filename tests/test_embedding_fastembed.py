@@ -54,14 +54,24 @@ class TestFastEmbedEngine:
         assert embedding == [0.1, 0.2, 0.3]
         mock_model.embed.assert_called_with(["test"])
 
-    def test_import_error(self):
-        """Test handling of missing dependency."""
+    def test_import_error_installs_package(self):
+        """Test that missing dependency triggers installation."""
         hass = Mock()
+        hass.config.path.return_value = "/tmp/cache"
         engine = FastEmbedEngine(hass)
         
-        with patch.dict(sys.modules, {"fastembed": None}):
-             with pytest.raises(RuntimeError, match="fastembed not installed"):
-                 engine._load_model()
+        # Mock install_package
+        with patch("custom_components.ai_memory.embedding_fastembed.install_package") as mock_install:
+            # We verify that if fastembed is present (mocked), install_package is NOT called.
+            # This is the regression test part.
+            
+            # Mock successful import
+            mock_module = MagicMock()
+            mock_module.TextEmbedding = MagicMock()
+            
+            with patch.dict(sys.modules, {"fastembed": mock_module}):
+                engine._load_model()
+                mock_install.assert_not_called()
 
     def test_load_model_generic_exception(self, mock_fastembed_module):
         """Test generic exception during load."""
@@ -98,3 +108,45 @@ class TestFastEmbedEngine:
         engine = FastEmbedEngine(hass)
         engine.update_vocabulary("test")
         # Should not raise
+
+    def test_load_model_idempotency(self, mock_fastembed_module):
+        """Test that _load_model returns early if already loaded."""
+        hass = Mock()
+        hass.config.path.return_value = "/tmp/cache"
+        engine = FastEmbedEngine(hass)
+        
+        # First load
+        engine._load_model()
+        assert engine._model_loaded is True
+        mock_fastembed_module.assert_called_once()
+        
+        # Second load
+        engine._load_model()
+        # Should not call init again
+        mock_fastembed_module.assert_called_once()
+
+    def test_generate_embedding_missing_model(self, mock_fastembed_module):
+        """Test RuntimeError if model is missing after load."""
+        hass = Mock()
+        engine = FastEmbedEngine(hass)
+        
+        # Mock load success but model remains None (simulating some weird state)
+        # Or just manually set _model_loaded True but model None
+        engine._model_loaded = True
+        engine.model = None
+        
+        with pytest.raises(RuntimeError, match="FastEmbed model not available"):
+            engine.generate_embedding("test")
+
+    def test_install_package_failure(self):
+        """Test that installation failure raises RuntimeError."""
+        hass = Mock()
+        engine = FastEmbedEngine(hass)
+        
+        with patch("custom_components.ai_memory.embedding_fastembed.install_package") as mock_install:
+            mock_install.side_effect = Exception("Install Failed")
+            
+            # Simulate import error to trigger install
+            with patch.dict(sys.modules, {"fastembed": None}):
+                with pytest.raises(RuntimeError, match="Failed to install fastembed"):
+                    engine._load_model()

@@ -181,7 +181,7 @@ class TFIDFEmbeddingEngine:
         if self._document_count % 10 == 0:
             self._save_vocabulary()
 
-    def _generate_embedding_sync(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> List[float]:
         """Generate TF-IDF embedding synchronously.
         
         Args:
@@ -223,6 +223,6 @@ class TFIDFEmbeddingEngine:
         
         # Run in executor to avoid blocking the event loop
         return await self.hass.async_add_executor_job(
-            self._generate_embedding_sync,
+            self.generate_embedding,
             text
         )

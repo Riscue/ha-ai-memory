@@ -131,19 +131,19 @@ class TestTFIDFEmbeddingEngine:
         assert engine._term_document_freq["world"] == 1
         assert engine._term_document_freq["universe"] == 1
     
-    def test_embedding_generation_sync(self, mock_hass):
+    def test_generate_embedding(self, mock_hass):
         """Test synchronous embedding generation."""
         engine = TFIDFEmbeddingEngine(mock_hass, vector_dim=384)
         
         # Generate embedding
-        embedding = engine._generate_embedding_sync("hello world test")
+        embedding = engine.generate_embedding("hello world test")
         
         # Check output
         assert len(embedding) == 384
         assert all(isinstance(x, float) for x in embedding)
         
         # Test empty text
-        embedding = engine._generate_embedding_sync("")
+        embedding = engine.generate_embedding("")
         assert embedding == [0.0] * 384
     
     @pytest.mark.asyncio

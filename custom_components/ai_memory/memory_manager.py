@@ -89,6 +89,11 @@ class MemoryManager:
         """No-op for SQLite (data is on disk)."""
         pass
 
+    async def async_initialize(self):
+        """Initialize the memory manager and embedding engine."""
+        if self._embedding_engine:
+            await self._embedding_engine.async_initialize()
+
     async def async_add_memory(self, content: str, scope: str, agent_id: Optional[str] = None):
         """Add new memory entry."""
         if not content or not content.strip():

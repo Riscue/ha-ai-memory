@@ -7,6 +7,8 @@ from custom_components.ai_memory.constants import EMBEDDINGS_MODEL_NAME
 _LOGGER = logging.getLogger(__name__)
 
 
+from homeassistant.util.package import install_package
+
 class SentenceTransformerEngine:
     """SentenceTransformer embedding engine (Best Quality)."""
 
@@ -22,16 +24,21 @@ class SentenceTransformerEngine:
             return
 
         try:
+            import sentence_transformers
+        except ImportError:
+            _LOGGER.info("sentence-transformers not found, installing...")
+            try:
+                install_package("sentence-transformers")
+                import sentence_transformers
+            except Exception as e:
+                raise RuntimeError(f"Failed to install sentence-transformers: {e}")
+
+        try:
             from sentence_transformers import SentenceTransformer
             _LOGGER.debug(f"Loading SentenceTransformer model: {EMBEDDINGS_MODEL_NAME}...")
             self.model = SentenceTransformer(EMBEDDINGS_MODEL_NAME)
             self._model_loaded = True
             _LOGGER.debug("SentenceTransformer model loaded successfully")
-        except ImportError:
-            raise RuntimeError(
-                "sentence-transformers not installed. "
-                "Please install it manually or use a different engine."
-            )
         except Exception as e:
             raise RuntimeError(f"Failed to load SentenceTransformer model: {e}")
 

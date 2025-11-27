@@ -47,8 +47,13 @@ mock_llm.LLMContext = MockLLMContext
 mock_llm.APIInstance = MockAPIInstance
 mock_llm.ToolError = Exception
 
-with patch.dict("sys.modules", {"homeassistant.components.llm": mock_llm}):
+with patch.dict("sys.modules", {
+    "homeassistant.components.llm": mock_llm,
+    "homeassistant.helpers.llm": mock_llm
+}):
     from custom_components.ai_memory import memory_llm_api
+    import importlib
+    importlib.reload(memory_llm_api)
 
 
 @pytest.fixture
@@ -166,3 +171,18 @@ async def test_get_api_instance_no_manager():
     assert hasattr(instance, 'tools')
     assert len(instance.tools) == 0
     assert "Error: Memory system unavailable" in instance.api_prompt
+
+
+async def test_async_setup_duplicate_registration():
+    """Test that duplicate registration is handled gracefully."""
+    hass = MagicMock(spec=HomeAssistant)
+    
+    # Patch the llm module used by memory_llm_api
+    with patch.object(memory_llm_api, "llm") as mock_llm_module:
+        # Mock llm.async_register_api to raise exception
+        mock_llm_module.async_register_api.side_effect = Exception("API already registered")
+        
+        # Should not raise exception
+        await memory_llm_api.async_setup(hass)
+        
+        mock_llm_module.async_register_api.assert_called_once()

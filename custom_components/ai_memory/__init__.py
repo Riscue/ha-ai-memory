@@ -34,6 +34,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     manager = MemoryManager(hass, engine_type, max_entries)
     await manager.async_load_memories()
 
+    # Initialize embedding engine (installs dependencies if needed)
+    await manager.async_initialize()
+
     hass.data[DOMAIN]["manager"] = manager
     _LOGGER.debug("Initialized Single Memory Manager")
 

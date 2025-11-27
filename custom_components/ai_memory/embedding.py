@@ -148,6 +148,13 @@ class EmbeddingEngine:
                 text
             )
 
+    async def async_initialize(self):
+        """Initialize the engine asynchronously (non-blocking)."""
+        if self._initialized:
+            return
+
+        await self.hass.async_add_executor_job(self._initialize_engine)
+
     @property
     def engine_name(self) -> Optional[str]:
         """Get the name of the active engine."""

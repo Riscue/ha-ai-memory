@@ -55,44 +55,23 @@ class TestSentenceTransformerEngine:
         assert embedding == [0.1, 0.2, 0.3]
         mock_model.encode.assert_called_with("test")
 
-    def test_import_error(self):
-        """Test handling of missing dependency."""
+    def test_import_error_installs_package(self):
+        """Test that missing dependency triggers installation."""
         hass = Mock()
         engine = SentenceTransformerEngine(hass)
         
-        # Remove from sys.modules to simulate missing package
-        with patch.dict(sys.modules):
-            sys.modules.pop("sentence_transformers", None)
+        # Mock install_package
+        with patch("custom_components.ai_memory.embedding_sentence_transformer.install_package") as mock_install:
+            # We verify that if sentence_transformers is present (mocked), install_package is NOT called.
+            # This is the regression test part.
             
-            # Also need to ensure builtins.__import__ fails for it
-            # or just rely on the fact that it's not in sys.modules and not in path
-            # But since we are in a venv where it might not be installed, it might just work.
-            # If it IS installed, we need to force failure.
+            # Mock successful import
+            mock_module = MagicMock()
+            mock_module.SentenceTransformer = MagicMock()
             
-            with patch("builtins.__import__", side_effect=ImportError):
-                # This is too aggressive, it breaks all imports.
-                # We need a side_effect that only fails for sentence_transformers
-                pass
-
-        # Better way: Mock the import inside the method by patching sys.modules with None?
-        # No, that might cause issues.
-        # Let's just patch the class to raise ImportError when instantiated? No, the import happens before.
-        
-        # We can patch `importlib.import_module` if used, but it uses `import ...` statement.
-        
-        # Let's try patching the class in the module, but the module isn't imported yet.
-        
-        # Simplest: Use a side_effect on the mock module if we keep it mocked, 
-        # or unmock it and assume it's missing (which it is in this env).
-        
-        # Since we know it's missing in this env, we can just run it?
-        # But we want the test to pass even if it IS installed.
-        
-        # Let's use the fixture but make it raise ImportError
-        with patch.dict(sys.modules, {"sentence_transformers": None}):
-             # When sys.modules has None, import raises ImportError
-             with pytest.raises(RuntimeError, match="sentence-transformers not installed"):
-                 engine._load_model()
+            with patch.dict(sys.modules, {"sentence_transformers": mock_module}):
+                engine._load_model()
+                mock_install.assert_not_called()
 
     def test_load_model_generic_exception(self, mock_sentence_transformers_module):
         """Test generic exception during load."""
@@ -121,3 +100,50 @@ class TestSentenceTransformerEngine:
         
         assert engine._model_loaded is True
         mock_sentence_transformers_module.assert_called_once()
+
+    def test_update_vocabulary(self):
+        """Test update_vocabulary (no-op)."""
+        hass = Mock()
+        engine = SentenceTransformerEngine(hass)
+        engine.update_vocabulary("test")
+        # Should not raise
+
+    def test_load_model_idempotency(self, mock_sentence_transformers_module):
+        """Test that _load_model returns early if already loaded."""
+        hass = Mock()
+        engine = SentenceTransformerEngine(hass)
+        
+        # First load
+        engine._load_model()
+        assert engine._model_loaded is True
+        mock_sentence_transformers_module.assert_called_once()
+        
+        # Second load
+        engine._load_model()
+        # Should not call init again
+        mock_sentence_transformers_module.assert_called_once()
+
+    def test_generate_embedding_missing_model(self, mock_sentence_transformers_module):
+        """Test RuntimeError if model is missing after load."""
+        hass = Mock()
+        engine = SentenceTransformerEngine(hass)
+        
+        # Mock load success but model remains None
+        engine._model_loaded = True
+        engine.model = None
+        
+        with pytest.raises(RuntimeError, match="SentenceTransformer model not available"):
+            engine.generate_embedding("test")
+
+    def test_install_package_failure(self):
+        """Test that installation failure raises RuntimeError."""
+        hass = Mock()
+        engine = SentenceTransformerEngine(hass)
+        
+        with patch("custom_components.ai_memory.embedding_sentence_transformer.install_package") as mock_install:
+            mock_install.side_effect = Exception("Install Failed")
+            
+            # Simulate import error to trigger install
+            with patch.dict(sys.modules, {"sentence_transformers": None}):
+                with pytest.raises(RuntimeError, match="Failed to install sentence-transformers"):
+                    engine._load_model()

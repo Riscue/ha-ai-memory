@@ -34,6 +34,7 @@ async def test_setup_entry_creates_single_manager(hass: HomeAssistant, mock_conf
             }):
         mock_instance = mock_manager_cls.return_value
         mock_instance.async_load_memories = AsyncMock()
+        mock_instance.async_initialize = AsyncMock()
 
         assert await async_setup_entry(hass, mock_config_entry)
 
