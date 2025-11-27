@@ -1,3 +1,5 @@
 [run]
 branch = True
 source = custom_components/ai_memory/
+omit =
+    custom_components/ai_memory/debug_llm.py

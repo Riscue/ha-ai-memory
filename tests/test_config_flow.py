@@ -75,7 +75,7 @@ async def test_form_directory_creation_error(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
-    
+
     with patch("os.makedirs", side_effect=OSError("Permission denied")):
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -83,6 +83,6 @@ async def test_form_directory_creation_error(hass: HomeAssistant) -> None:
                 "storage_location": "/root/protected",
             },
         )
-        
+
     assert result2["type"] == FlowResultType.FORM
     assert result2["errors"] == {"base": "cannot_create_directory"}

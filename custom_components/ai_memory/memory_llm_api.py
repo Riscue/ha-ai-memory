@@ -55,7 +55,7 @@ class AddMemoryTool(llm.Tool):
             return {"success": True, "message": f"Saved to {scope} memory."}
         except Exception as e:
             _LOGGER.error(f"Error adding memory: {e}")
-            raise llm.ToolError(f"Error: {e}")
+            raise Exception(f"Error: {e}")
 
 
 class SearchMemoryTool(llm.Tool):
@@ -97,7 +97,7 @@ class SearchMemoryTool(llm.Tool):
             }
         except Exception as e:
             _LOGGER.error(f"Error searching memory: {e}")
-            raise llm.ToolError(f"Error: {e}")
+            raise Exception(f"Error: {e}")
 
 
 class MemoryAPI(llm.API):
