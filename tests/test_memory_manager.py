@@ -48,7 +48,7 @@ def memory_manager(mock_hass, mock_embedding_engine):
     """Create MemoryManager instance."""
     with patch("os.makedirs"), \
             patch("sqlite3.connect"):  # Mock init db
-        manager = MemoryManager(mock_hass, "/tmp/test")
+        manager = MemoryManager(mock_hass)
         return manager
 
 
@@ -58,7 +58,7 @@ async def test_init_db(mock_hass, mock_embedding_engine):
         mock_cursor = MagicMock()
         mock_connect.return_value.__enter__.return_value.cursor.return_value = mock_cursor
 
-        MemoryManager(mock_hass, "/tmp/test")
+        MemoryManager(mock_hass)
 
         # Verify table creation
         mock_cursor.execute.assert_called()
@@ -120,7 +120,7 @@ async def test_get_all_memories_sql(memory_manager, mock_db):
 async def test_init_db_failure(mock_hass):
     """Test database initialization failure."""
     with patch("sqlite3.connect", side_effect=Exception("DB Error")):
-        MemoryManager(mock_hass, "/tmp/test")
+        MemoryManager(mock_hass)
         # Should log error but not crash
 
 
@@ -205,7 +205,7 @@ async def test_ensure_directory_exists_failure(mock_hass):
         # We also need to mock other init calls to isolate the failure
         with patch("custom_components.ai_memory.embedding.EmbeddingEngine"), \
                 patch("sqlite3.connect"):
-            manager = MemoryManager(mock_hass, "/tmp/test")
+            manager = MemoryManager(mock_hass)
             # It catches exception and logs error, so initialization should proceed (or at least not crash)
             # But wait, _ensure_directory_exists returns False. The init doesn't check return value.
             # So it just logs.

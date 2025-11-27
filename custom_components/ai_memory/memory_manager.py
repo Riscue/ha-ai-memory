@@ -1,12 +1,14 @@
 import json
 import logging
-import os
 import sqlite3
 import uuid
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 
 from homeassistant.core import HomeAssistant
+
+from custom_components.ai_memory import ENGINE_AUTO
+from custom_components.ai_memory.constants import DEFAULT_STORAGE_PATH
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,33 +19,20 @@ class MemoryManager:
     def __init__(
             self,
             hass: HomeAssistant,
-            storage_location: str,
+            engine_type: str = ENGINE_AUTO,
             max_entries: int = 1000
     ):
         self.hass = hass
-        self.storage_location = storage_location
-        self.max_entries = max_entries
         self._embedding_engine = None
-
-        # Ensure memory directory exists
-        self._ensure_directory_exists(self.storage_location)
+        self.max_entries = max_entries
 
         # Initialize embedding engine
         from .embedding import EmbeddingEngine
-        self._embedding_engine = EmbeddingEngine(hass)
+        self._embedding_engine = EmbeddingEngine(hass, engine_type)
 
         # Initialize DB
-        self.db_path = os.path.join(self.storage_location, "ai_memory.db")
+        self.db_path = DEFAULT_STORAGE_PATH
         self._init_db()
-
-    def _ensure_directory_exists(self, directory: str) -> bool:
-        """Ensure directory exists, return True if successful."""
-        try:
-            os.makedirs(directory, exist_ok=True)
-            return True
-        except Exception as e:
-            _LOGGER.error(f"Failed to create directory {directory}: {e}")
-            return False
 
     def _init_db(self):
         """Initialize database schema."""
@@ -157,6 +146,13 @@ class MemoryManager:
             )
         )
         _LOGGER.debug(f"Added memory to DB (scope={scope}): {content[:30]}...")
+
+        # Update vocabulary for TF-IDF engine (improves future embeddings)
+        if self._embedding_engine:
+            try:
+                await self._embedding_engine.async_update_vocabulary(content)
+            except Exception as e:
+                _LOGGER.debug(f"Vocabulary update skipped: {e}")
 
         if hasattr(self.hass, 'bus'):
             self.hass.bus.async_fire("ai_memory_updated")

@@ -1,69 +1,154 @@
-"""Embedding Engine for AI Memory."""
+"""Embedding Engine for AI Memory with multiple backend support."""
 import logging
-from typing import List
+from typing import List, Optional
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory.constants import EMBEDDINGS_MODEL_NAME
+from custom_components.ai_memory.constants import (
+    ENGINE_AUTO,
+    ENGINE_FASTEMBED,
+    ENGINE_SENTENCE_TRANSFORMER,
+    ENGINE_TFIDF,
+    ENGINE_FALLBACK_ORDER,
+    EMBEDDINGS_VECTOR_DIM,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class EmbeddingEngine:
-    """Engine to generate vector embeddings from text."""
+    """Engine to generate vector embeddings from text with multiple backends.
+    
+    Supports multiple embedding engines with automatic fallback:
+    1. SentenceTransformer (Best Quality)
+    2. FastEmbed (Good Quality, RPi4 Optimized)
+    3. TF-IDF (Lightweight, No Dependencies)
+    """
 
-    def __init__(self, hass: HomeAssistant):
-        """Initialize the embedding engine."""
-        self.hass = hass
-        self._model = None
-        self._model_loaded = False
-
-    def _load_model(self):
-        """Load the sentence-transformer model.
+    def __init__(self, hass: HomeAssistant, engine_type: str = ENGINE_AUTO):
+        """Initialize the embedding engine.
         
-        This is a blocking operation and should be run in an executor.
+        Args:
+            hass: Home Assistant instance
+            engine_type: Engine type to use (auto, sentence_transformer, fastembed, tfidf)
         """
-        if self._model_loaded:
-            return
+        self.hass = hass
+        self._engine_type = engine_type
+        self._engine = None
+        self._engine_name = None
+        self._initialized = False
+
+    def _create_engine(self, engine_type: str):
+        """Create specific engine instance."""
+        try:
+            if engine_type == ENGINE_SENTENCE_TRANSFORMER:
+                from .embedding_sentence_transformer import SentenceTransformerEngine
+                return SentenceTransformerEngine(self.hass)
+
+            elif engine_type == ENGINE_FASTEMBED:
+                from .embedding_fastembed import FastEmbedEngine
+                return FastEmbedEngine(self.hass)
+
+            elif engine_type == ENGINE_TFIDF:
+                from .embedding_tfidf import TFIDFEmbeddingEngine
+                return TFIDFEmbeddingEngine(self.hass, EMBEDDINGS_VECTOR_DIM)
+
+        except ImportError as e:
+            _LOGGER.debug("Engine %s import failed: %s", engine_type, e)
+            return None
+        except Exception as e:
+            _LOGGER.warning("Engine %s creation failed: %s", engine_type, e)
+            return None
+
+        return None
+
+    def _try_initialize_engine(self, engine_type: str) -> bool:
+        """Try to initialize a specific engine."""
+        _LOGGER.debug("Attempting to initialize engine: %s", engine_type)
+
+        engine = self._create_engine(engine_type)
+        if not engine:
+            return False
 
         try:
-            from sentence_transformers import SentenceTransformer
-            _LOGGER.debug(f"Loading embedding model: {EMBEDDINGS_MODEL_NAME}...")
-            self._model = SentenceTransformer(EMBEDDINGS_MODEL_NAME)
-            self._model_loaded = True
-            _LOGGER.debug("Embedding model loaded successfully")
-        except ImportError:
-            _LOGGER.error(
-                "sentence-transformers not installed. "
-                "Please wait for Home Assistant to install dependencies or install manually."
-            )
-            raise
+            # Test generation (lightweight check)
+            # For some engines this triggers model load
+            if hasattr(engine, '_load_model'):
+                engine._load_model()
+
+            self._engine = engine
+            self._engine_name = engine_type
+            _LOGGER.info("Embedding engine initialized: %s", engine_type)
+            return True
+
         except Exception as e:
-            _LOGGER.error(f"Failed to load embedding model: {e}")
-            raise
+            _LOGGER.warning("Failed to initialize %s: %s", engine_type, e)
+            return False
+
+    def _initialize_engine(self):
+        """Initialize the embedding engine with fallback support."""
+        if self._initialized:
+            return
+
+        _LOGGER.debug("Initializing embedding engine (requested: %s)", self._engine_type)
+
+        success = False
+
+        # Specific engine requested
+        if self._engine_type != ENGINE_AUTO:
+            if self._try_initialize_engine(self._engine_type):
+                success = True
+            else:
+                _LOGGER.warning(
+                    "Requested engine '%s' failed. Falling back to AUTO.",
+                    self._engine_type
+                )
+                # Fall through to AUTO logic
+
+        # AUTO mode (or fallback from failed specific engine)
+        if not success:
+            for engine_type in ENGINE_FALLBACK_ORDER:
+                if self._try_initialize_engine(engine_type):
+                    success = True
+                    break
+
+        if not success:
+            raise RuntimeError("No embedding engine available. Please check logs.")
+
+        self._initialized = True
 
     def _generate_embedding_sync(self, text: str) -> List[float]:
         """Generate embedding synchronously."""
-        if not self._model_loaded:
-            self._load_model()
+        if not self._initialized:
+            self._initialize_engine()
 
-        if not self._model:
-            raise RuntimeError("Embedding model not available")
+        if not self._engine:
+            raise RuntimeError("Embedding engine not initialized")
 
-        # Generate embedding
-        # encode returns a numpy array, convert to list
-        embedding = self._model.encode(text)
-        return embedding.tolist()
+        return self._engine.generate_embedding(text)
 
     async def async_generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text asynchronously.
-        
-        This runs the heavy model inference in the executor to avoid blocking the loop.
-        """
+        """Generate embedding for text asynchronously."""
         if not text:
-            return []
+            return [0.0] * EMBEDDINGS_VECTOR_DIM
 
         return await self.hass.async_add_executor_job(
             self._generate_embedding_sync,
             text
         )
+
+    async def async_update_vocabulary(self, text: str):
+        """Update vocabulary for engines that need it."""
+        if not self._initialized:
+            self._initialize_engine()
+
+        if hasattr(self._engine, 'update_vocabulary'):
+            await self.hass.async_add_executor_job(
+                self._engine.update_vocabulary,
+                text
+            )
+
+    @property
+    def engine_name(self) -> Optional[str]:
+        """Get the name of the active engine."""
+        return self._engine_name

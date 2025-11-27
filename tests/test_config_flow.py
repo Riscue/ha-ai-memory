@@ -5,7 +5,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.ai_memory import DOMAIN
+from custom_components.ai_memory.constants import DOMAIN
 
 
 async def test_form(hass: HomeAssistant) -> None:
@@ -23,16 +23,16 @@ async def test_form(hass: HomeAssistant) -> None:
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {
-                "storage_location": "/tmp/test_ai_memory",
                 "max_entries": 500,
+                "embedding_engine": "fastembed",
             },
         )
         await hass.async_block_till_done()
 
     assert result2["type"] == FlowResultType.CREATE_ENTRY
     assert result2["title"] == "AI Memory"
-    assert result2["data"]["storage_location"] == "/tmp/test_ai_memory"
     assert result2["data"]["max_entries"] == 500
+    assert result2["data"]["embedding_engine"] == "fastembed"
     assert len(mock_setup_entry.mock_calls) == 1
 
 
@@ -60,29 +60,14 @@ async def test_options_flow(hass: HomeAssistant, mock_config_entry) -> None:
     result2 = await hass.config_entries.options.async_configure(
         result["flow_id"],
         user_input={
-            "storage_location": "/tmp/new_location",
             "max_entries": 2000,
+            "embedding_engine": "tfidf",
         },
     )
 
     assert result2["type"] == FlowResultType.CREATE_ENTRY
-    assert mock_config_entry.data["storage_location"] == "/tmp/new_location"
     assert mock_config_entry.data["max_entries"] == 2000
+    assert mock_config_entry.data["embedding_engine"] == "tfidf"
 
 
-async def test_form_directory_creation_error(hass: HomeAssistant) -> None:
-    """Test error handling when directory creation fails."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
 
-    with patch("os.makedirs", side_effect=OSError("Permission denied")):
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                "storage_location": "/root/protected",
-            },
-        )
-
-    assert result2["type"] == FlowResultType.FORM
-    assert result2["errors"] == {"base": "cannot_create_directory"}

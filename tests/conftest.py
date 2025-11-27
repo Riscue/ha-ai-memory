@@ -47,7 +47,6 @@ def mock_config_entry():
     return MockConfigEntry(
         domain="ai_memory",
         data={
-            "storage_location": "/tmp/test_ai_memory",
             "max_entries": 500,
         },
         entry_id="test_entry_id",

@@ -8,8 +8,8 @@ from custom_components.ai_memory import (
     async_setup_entry,
     async_unload_entry,
     async_reload_entry,
-    DOMAIN,
 )
+from custom_components.ai_memory.constants import DOMAIN
 
 
 async def test_async_setup(hass: HomeAssistant):

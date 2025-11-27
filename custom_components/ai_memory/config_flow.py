@@ -10,9 +10,18 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 
-from .constants import DOMAIN
+from .constants import (
+    DOMAIN,
+    ENGINE_AUTO,
+    ENGINE_FASTEMBED,
+    ENGINE_SENTENCE_TRANSFORMER,
+    ENGINE_TFIDF,
+    ENGINE_NAMES,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+CONF_EMBEDDING_ENGINE = "embedding_engine"
 
 
 class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -22,7 +31,6 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self):
         """Initialize config flow."""
-        self._storage_location = "/config/ai_memory/"
         self._default_max_entries = 1000
 
     async def async_step_user(
@@ -36,35 +44,25 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
-            storage_location = user_input.get("storage_location", self._storage_location)
-
-            # Create storage directory
-            try:
-                os.makedirs(storage_location, exist_ok=True)
-                _LOGGER.debug(f"Memory directory created/verified: {storage_location}")
-            except Exception as e:
-                _LOGGER.error(f"Failed to create memory directory: {e}")
-                errors["base"] = "cannot_create_directory"
-
             if not errors:
                 return self.async_create_entry(
                     title="AI Memory",
                     data={
-                        "storage_location": storage_location,
                         "max_entries": user_input.get("max_entries", self._default_max_entries),
+                        "embedding_engine": user_input.get("embedding_engine", ENGINE_AUTO),
                         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     }
                 )
 
         schema = vol.Schema({
-            vol.Required(
-                "storage_location",
-                default=self._storage_location
-            ): cv.string,
             vol.Optional(
                 "max_entries",
                 default=self._default_max_entries
             ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10000)),
+            vol.Optional(
+                "embedding_engine",
+                default=ENGINE_AUTO
+            ): vol.In(ENGINE_NAMES),
         })
 
         return self.async_show_form(
@@ -110,13 +108,13 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required(
-                    "storage_location",
-                    default=self.config_entry.data.get("storage_location", "/config/ai_memory/")
-                ): cv.string,
-                vol.Required(
                     "max_entries",
                     default=self.config_entry.data.get("max_entries", 1000)
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10000)),
+                vol.Optional(
+                    "embedding_engine",
+                    default=self.config_entry.data.get("embedding_engine", ENGINE_AUTO)
+                ): vol.In(ENGINE_NAMES),
             }),
             errors=errors
         )

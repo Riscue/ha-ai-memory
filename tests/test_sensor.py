@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory import DOMAIN
+from custom_components.ai_memory.constants import DOMAIN
 from custom_components.ai_memory.sensor import AIMemorySensor, async_setup_entry as sensor_setup
 
 
@@ -13,7 +13,6 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
 
     # Mock manager
     mock_manager = MagicMock()
-    mock_manager.storage_location = "/tmp"
     mock_manager.max_entries = 100
 
     hass.data[DOMAIN] = {"manager": mock_manager}
@@ -27,7 +26,6 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     sensor = sensors[0]
     assert isinstance(sensor, AIMemorySensor)
     assert sensor.state == "Active"
-    assert sensor.extra_state_attributes["storage_location"] == "/tmp"
 
 
 async def test_sensor_update_event(hass: HomeAssistant, mock_config_entry):
