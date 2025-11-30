@@ -80,33 +80,80 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_remote_config(
             self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """Handle remote configuration step."""
+        """Handle remote configuration step (URL)."""
         errors = {}
 
         if user_input is not None:
-            # Merge with initial input
-            data = {
-                "max_entries": self._user_input.get("max_entries", self._default_max_entries),
-                "embedding_engine": self._user_input.get("embedding_engine"),
-                "remote_url": user_input.get(CONF_REMOTE_URL),
-                "model_name": user_input.get(CONF_MODEL_NAME),
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-            return self.async_create_entry(title="AI Memory", data=data)
+            self._user_input[CONF_REMOTE_URL] = user_input[CONF_REMOTE_URL]
+            return await self.async_step_model_selection()
 
         schema = vol.Schema({
             vol.Required(
                 CONF_REMOTE_URL,
                 default=DEFAULT_REMOTE_URL
             ): str,
-            vol.Optional(
-                CONF_MODEL_NAME,
-                default=DEFAULT_MODEL
-            ): str,
         })
 
         return self.async_show_form(
             step_id="remote_config",
+            data_schema=schema,
+            errors=errors
+        )
+
+    async def async_step_model_selection(
+            self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle model selection step."""
+        errors = {}
+        remote_url = self._user_input.get(CONF_REMOTE_URL)
+
+        if user_input is not None:
+            model_name = user_input[CONF_MODEL_NAME]
+
+            # Trigger model download
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                            f"{remote_url}/api/pull",
+                            json={"name": model_name}
+                    ) as response:
+                        if response.status != 200:
+                            errors["base"] = "pull_failed"
+                        else:
+                            # Success
+                            data = {
+                                "max_entries": self._user_input.get("max_entries", self._default_max_entries),
+                                "embedding_engine": self._user_input.get("embedding_engine"),
+                                "remote_url": remote_url,
+                                "model_name": model_name,
+                                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            }
+                            return self.async_create_entry(title="AI Memory", data=data)
+            except Exception:
+                errors["base"] = "cannot_connect"
+
+        # Fetch models
+        models = [DEFAULT_MODEL]
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{remote_url}/api/tags", timeout=5) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        models = [m["name"] for m in data.get("models", [])]
+        except Exception:
+            errors["base"] = "cannot_connect"
+
+        schema = vol.Schema({
+            vol.Required(
+                CONF_MODEL_NAME,
+                default=models[0] if models else DEFAULT_MODEL
+            ): vol.In(models),
+        })
+
+        return self.async_show_form(
+            step_id="model_selection",
             data_schema=schema,
             errors=errors
         )
@@ -167,38 +214,90 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
     async def async_step_remote_config(
             self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """Handle remote configuration step."""
+        """Handle remote configuration step (URL)."""
         errors = {}
 
         if user_input is not None:
-            # Merge with initial input
-            data = {
-                "max_entries": self._user_input.get("max_entries"),
-                "embedding_engine": self._user_input.get("embedding_engine"),
-                "remote_url": user_input.get(CONF_REMOTE_URL),
-                "model_name": user_input.get(CONF_MODEL_NAME),
-            }
-
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=data
-            )
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            return self.async_create_entry(title="", data={})
+            self._user_input[CONF_REMOTE_URL] = user_input[CONF_REMOTE_URL]
+            return await self.async_step_model_selection()
 
         schema = vol.Schema({
             vol.Required(
                 CONF_REMOTE_URL,
                 default=self.config_entry.data.get("remote_url", DEFAULT_REMOTE_URL)
             ): str,
-            vol.Optional(
-                CONF_MODEL_NAME,
-                default=self.config_entry.data.get("model_name", DEFAULT_MODEL)
-            ): str,
         })
 
         return self.async_show_form(
             step_id="remote_config",
+            data_schema=schema,
+            errors=errors
+        )
+
+    async def async_step_model_selection(
+            self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle model selection step."""
+        errors = {}
+        remote_url = self._user_input.get(CONF_REMOTE_URL)
+
+        if user_input is not None:
+            model_name = user_input[CONF_MODEL_NAME]
+
+            # Trigger model download
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                            f"{remote_url}/api/pull",
+                            json={"name": model_name}
+                    ) as response:
+                        if response.status != 200:
+                            errors["base"] = "pull_failed"
+                        else:
+                            # Success
+                            data = {
+                                "max_entries": self._user_input.get("max_entries"),
+                                "embedding_engine": self._user_input.get("embedding_engine"),
+                                "remote_url": remote_url,
+                                "model_name": model_name,
+                            }
+
+                            self.hass.config_entries.async_update_entry(
+                                self.config_entry,
+                                data=data
+                            )
+                            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                            return self.async_create_entry(title="", data={})
+            except Exception:
+                errors["base"] = "cannot_connect"
+
+        # Fetch models
+        models = [DEFAULT_MODEL]
+        current_model = self.config_entry.data.get("model_name", DEFAULT_MODEL)
+
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{remote_url}/api/tags", timeout=5) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        models = [m["name"] for m in data.get("models", [])]
+        except Exception:
+            errors["base"] = "cannot_connect"
+
+        # Ensure current model is in the list if possible, or default to it
+        default_model = current_model if current_model in models else (models[0] if models else DEFAULT_MODEL)
+
+        schema = vol.Schema({
+            vol.Required(
+                CONF_MODEL_NAME,
+                default=default_model
+            ): vol.In(models),
+        })
+
+        return self.async_show_form(
+            step_id="model_selection",
             data_schema=schema,
             errors=errors
         )

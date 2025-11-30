@@ -47,14 +47,18 @@ def mock_db():
 def memory_manager(mock_hass, mock_embedding_engine):
     """Create MemoryManager instance."""
     with patch("os.makedirs"), \
-            patch("sqlite3.connect"):  # Mock init db
+            patch("sqlite3.connect"), \
+            patch("custom_components.ai_memory.memory_manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
         manager = MemoryManager(mock_hass)
         return manager
 
 
 async def test_init_db(mock_hass, mock_embedding_engine):
     """Test database initialization."""
-    with patch("sqlite3.connect") as mock_connect:
+    with patch("sqlite3.connect") as mock_connect, \
+            patch("custom_components.ai_memory.memory_manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
         mock_cursor = MagicMock()
         mock_connect.return_value.__enter__.return_value.cursor.return_value = mock_cursor
 
@@ -81,7 +85,20 @@ async def test_add_memory_sql(memory_manager, mock_db):
     assert args[4] == "agent_1"  # agent_id
 
 
-async def test_search_memory_sql(memory_manager, mock_db):
+async def test_async_get_memory_counts(mock_hass, memory_manager, mock_db):
+    """Test getting memory counts."""
+    # Mock return for SELECT scope, COUNT(*)
+    mock_db.fetchall.return_value = [
+        ("common", 1),
+        ("private", 1)
+    ]
+    
+    counts = await memory_manager.async_get_memory_counts()
+    assert counts["common"] == 1
+    assert counts["private"] == 1
+    assert counts["total"] == 2
+
+async def test_async_search_memory(memory_manager, mock_db):
     """Test search executes SELECT and filters."""
     # Mock SELECT return
     mock_db.fetchall.return_value = [
@@ -209,4 +226,14 @@ async def test_ensure_directory_exists_failure(mock_hass):
             # It catches exception and logs error, so initialization should proceed (or at least not crash)
             # But wait, _ensure_directory_exists returns False. The init doesn't check return value.
             # So it just logs.
-            pass
+    async def test_async_initialize_failure(memory_manager, mock_embedding_engine):
+        """Test initialization failure when remote is down."""
+        # Mock engine to have async_get_version returning False
+        mock_embedding_engine._engine = AsyncMock()
+        mock_embedding_engine._engine.async_get_version.return_value = False
+        
+        # We need to re-assign the engine to the manager's internal engine wrapper
+        memory_manager._embedding_engine = mock_embedding_engine
+        
+        with pytest.raises(RuntimeError, match="Remote embedding service is not reachable"):
+            await memory_manager.async_initialize()

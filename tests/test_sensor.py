@@ -1,5 +1,5 @@
 """Tests for AI Memory Sensor."""
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 from homeassistant.core import HomeAssistant
 
@@ -13,7 +13,9 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
 
     # Mock manager
     mock_manager = MagicMock()
-    mock_manager.max_entries = 100
+    mock_manager._max_entries = 100
+    mock_manager._embedding_engine.engine_name = "test_engine"
+    mock_manager.async_get_memory_counts = AsyncMock(return_value={"total": 10})
 
     hass.data[DOMAIN] = {"manager": mock_manager}
 
@@ -26,11 +28,19 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     sensor = sensors[0]
     assert isinstance(sensor, AIMemorySensor)
     assert sensor.state == "Active"
+    
+    # Test update
+    await sensor.async_update()
+    assert sensor.extra_state_attributes["memory_counts"] == {"total": 10}
+    assert sensor.extra_state_attributes["max_entries"] == 500
 
 
 async def test_sensor_update_event(hass: HomeAssistant, mock_config_entry):
     """Test that sensor updates on event."""
     mock_manager = MagicMock()
+    mock_manager._max_entries = 100
+    mock_manager._embedding_engine.engine_name = "test_engine"
+    
     hass.data[DOMAIN] = {"manager": mock_manager}
 
     sensor = AIMemorySensor(hass, mock_config_entry, mock_manager)

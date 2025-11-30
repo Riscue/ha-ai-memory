@@ -1,5 +1,7 @@
 [run]
 branch = True
-source = custom_components/ai_memory/
+source =
+    custom_components/ai_memory/
+    embedding_service
 omit =
     custom_components/ai_memory/debug_llm.py

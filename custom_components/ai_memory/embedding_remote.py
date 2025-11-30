@@ -35,6 +35,16 @@ class RemoteEmbeddingEngine:
         # Let's use a simple check.
         pass
 
+    async def async_get_version(self) -> bool:
+        """Check if remote service is available."""
+        url = f"{self.remote_url}/api/version"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=5) as response:
+                    return response.status == 200
+        except Exception:
+            return False
+
     async def async_load_model(self):
         """Async load model (pull)."""
         url = f"{self.remote_url}/api/pull"
@@ -47,8 +57,9 @@ class RemoteEmbeddingEngine:
                     else:
                         _LOGGER.error("Failed to load remote model: %s", await response.text())
         except Exception as e:
-            _LOGGER.error("Failed to connect to remote service: %s", e)
-            raise RuntimeError(f"Remote service connection failed: {e}")
+            _LOGGER.error("Failed to connect to remote service during pull: %s", e)
+            # Don't raise here, just log, so we don't crash startup
+            self._model_loaded = False
 
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding synchronously (blocking).
@@ -75,7 +86,7 @@ class RemoteEmbeddingEngine:
             )
             response.raise_for_status()
             data = response.json()
-            return data["embedding"]
+            return data["embeddings"][0]
         except Exception as e:
             _LOGGER.error("Remote embedding generation failed: %s", e)
             raise RuntimeError(f"Remote embedding failed: {e}")
@@ -87,11 +98,11 @@ class RemoteEmbeddingEngine:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                         url,
-                        json={"model": self.model_name, "prompt": text}
+                        json={"model": self.model_name, "input": text}
                 ) as response:
                     response.raise_for_status()
                     data = await response.json()
-                    return data["embedding"]
+                    return data["embeddings"][0]
         except Exception as e:
             _LOGGER.error("Remote embedding generation failed: %s", e)
             raise RuntimeError(f"Remote embedding failed: {e}")

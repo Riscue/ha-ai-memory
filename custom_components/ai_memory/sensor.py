@@ -1,6 +1,6 @@
 """Sensor platform for AI Memory integration."""
 import logging
-from datetime import datetime
+from datetime import timedelta, datetime
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -11,6 +11,8 @@ from .constants import DOMAIN
 from .memory_manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
+
+SCAN_INTERVAL = timedelta(minutes=15)
 
 
 async def async_setup_entry(
@@ -42,26 +44,30 @@ class AIMemorySensor(SensorEntity):
         self._attr_unique_id = "ai_memory_store"
         self._attr_icon = "mdi:brain"
         self._attr_entity_registry_enabled_default = True
+        self._memory_counts = {}
 
     @property
     def state(self):
-        # We can't easily get total count without a query in SQLite, 
-        # but for now let's assume we might want to expose something else or 
-        # just return "Active" or query count if cheap.
-        # Let's return "Active" for now as count requires async query.
         return "Active"
 
     @property
     def extra_state_attributes(self):
-        return {
+        attrs = {
             "embedding_engine": self.memory_manager._embedding_engine.engine_name,
             "max_entries": self.memory_manager._max_entries,
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "memory_counts": self._memory_counts,
         }
 
+        # Add config data
+        if self.entry.data:
+            attrs.update(self.entry.data)
+
+        return attrs
+
     async def async_update(self):
-        # No-op for now as state is static "Active"
-        pass
+        """Update sensor state."""
+        self._memory_counts = await self.memory_manager.async_get_memory_counts()
 
     async def async_added_to_hass(self):
         self.async_on_remove(
@@ -72,4 +78,5 @@ class AIMemorySensor(SensorEntity):
         )
 
     async def _handle_memory_update(self, event):
+        """Handle memory update event."""
         self.async_schedule_update_ha_state(force_refresh=True)

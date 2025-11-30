@@ -46,7 +46,6 @@ class AddMemoryTool(llm.Tool):
     ) -> JsonObjectType:
         content = tool_input.tool_args.get("content")
         scope = tool_input.tool_args.get("scope", "private")
-        _LOGGER.debug(f"AI Memory (search_memory): {scope} - {content}")
 
         # Determine agent_id
         agent_id = llm_context.assistant

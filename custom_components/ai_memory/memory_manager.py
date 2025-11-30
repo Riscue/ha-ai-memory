@@ -87,10 +87,36 @@ class MemoryManager:
         """No-op for SQLite (data is on disk)."""
         pass
 
+    async def async_get_memory_counts(self) -> Dict[str, int]:
+        """Get counts of memories by scope."""
+        counts = {"common": 0, "private": 0, "total": 0}
+        try:
+            rows = await self.hass.async_add_executor_job(
+                self._execute_query,
+                "SELECT scope, COUNT(*) FROM memories GROUP BY scope"
+            )
+            for scope, count in rows:
+                counts[scope] = count
+                counts["total"] += count
+        except Exception as e:
+            _LOGGER.error(f"Failed to get memory counts: {e}")
+        return counts
+
     async def async_initialize(self):
         """Initialize the memory manager and embedding engine."""
         if self._embedding_engine:
             await self._embedding_engine.async_initialize()
+
+            # If remote, check connection and pull
+            if hasattr(self._embedding_engine._engine, "async_get_version"):
+                is_ready = await self._embedding_engine._engine.async_get_version()
+                if is_ready:
+                    _LOGGER.info("Remote embedding service is reachable.")
+                    if hasattr(self._embedding_engine._engine, "async_load_model"):
+                        await self._embedding_engine._engine.async_load_model()
+                else:
+                    _LOGGER.error("Remote embedding service is NOT reachable at startup.")
+                    raise RuntimeError("Remote embedding service is not reachable")
 
     async def async_add_memory(self, content: str, scope: str, agent_id: Optional[str] = None):
         """Add new memory entry."""
@@ -108,7 +134,7 @@ class MemoryManager:
         count_res = await self.hass.async_add_executor_job(
             self._execute_query, "SELECT COUNT(*) FROM memories"
         )
-        if count_res and count_res[0][0] >= self.max_entries:
+        if count_res and count_res[0][0] >= self._max_entries:
             # Remove oldest
             await self.hass.async_add_executor_job(
                 self._execute_commit,
@@ -213,7 +239,8 @@ class MemoryManager:
         scored_memories.sort(key=lambda x: x["score"], reverse=True)
 
         # Filter by threshold
-        results = [m for m in scored_memories[:limit] if m["score"] > 0.1]
+        results = [m for m in scored_memories[:limit] if m["score"] > 0.4]
+        print(scored_memories)
         return results
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
