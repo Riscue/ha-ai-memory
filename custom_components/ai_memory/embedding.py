@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory.constants import (
+from .constants import (
     ENGINE_REMOTE,
     ENGINE_TFIDF,
     EMBEDDINGS_VECTOR_DIM,
@@ -96,7 +96,7 @@ class EmbeddingEngine:
                 "Requested engine '%s' failed. Falling back to TF-IDF.",
                 self._engine_type
             )
-            
+
             # 2. Strict Fallback to TF-IDF
             # Only if the requested engine was NOT TF-IDF (to avoid infinite loop or redundant check)
             if self._engine_type != ENGINE_TFIDF:

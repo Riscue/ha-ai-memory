@@ -1,12 +1,12 @@
 """TF-IDF based embedding engine for AI Memory (stdlib only, no dependencies)."""
+import json
 import logging
-import math
+import os
 import re
 from collections import Counter, defaultdict
 from typing import List, Dict
-import json
-import os
 
+import math
 from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,10 +95,10 @@ class TFIDFEmbeddingEngine:
         """
         if not tokens:
             return {}
-        
+
         term_counts = Counter(tokens)
         max_count = max(term_counts.values())
-        
+
         # Normalized TF: term_count / max_count_in_doc
         tf = {term: count / max_count for term, count in term_counts.items()}
         return tf
@@ -114,7 +114,7 @@ class TFIDFEmbeddingEngine:
         """
         if self._document_count == 0:
             return 1.0
-        
+
         # IDF = log(N / df(t))
         # Add smoothing: log((N + 1) / (df(t) + 1))
         df = self._term_document_freq.get(term, 0)
@@ -143,17 +143,17 @@ class TFIDFEmbeddingEngine:
             Fixed-dimension vector
         """
         vector = [0.0] * self.vector_dim
-        
+
         # Map each term to an index and accumulate scores
         for term, score in tf_idf.items():
             idx = self._hash_term_to_index(term)
             vector[idx] += score
-        
+
         # Normalize vector to unit length (L2 normalization)
         magnitude = math.sqrt(sum(x * x for x in vector))
         if magnitude > 0:
             vector = [x / magnitude for x in vector]
-        
+
         return vector
 
     def update_vocabulary(self, text: str):
@@ -168,15 +168,15 @@ class TFIDFEmbeddingEngine:
         tokens = self._tokenize(text)
         if not tokens:
             return
-        
+
         # Update document count
         self._document_count += 1
-        
+
         # Update document frequency for each unique term
         unique_terms = set(tokens)
         for term in unique_terms:
             self._term_document_freq[term] += 1
-        
+
         # Save vocabulary periodically (every 10 documents)
         if self._document_count % 10 == 0:
             self._save_vocabulary()
@@ -194,19 +194,19 @@ class TFIDFEmbeddingEngine:
         tokens = self._tokenize(text)
         if not tokens:
             return [0.0] * self.vector_dim
-        
+
         # Calculate TF
         tf = self._calculate_tf(tokens)
-        
+
         # Calculate TF-IDF
         tf_idf = {}
         for term, tf_score in tf.items():
             idf_score = self._calculate_idf(term)
             tf_idf[term] = tf_score * idf_score
-        
+
         # Create fixed-dimension vector
         vector = self._create_vector(tf_idf)
-        
+
         return vector
 
     async def async_generate_embedding(self, text: str) -> List[float]:
@@ -220,7 +220,7 @@ class TFIDFEmbeddingEngine:
         """
         if not text:
             return [0.0] * self.vector_dim
-        
+
         # Run in executor to avoid blocking the event loop
         return await self.hass.async_add_executor_job(
             self.generate_embedding,

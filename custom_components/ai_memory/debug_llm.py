@@ -3,6 +3,7 @@ import logging
 
 import homeassistant.helpers.llm as llm
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.llm import LLMContext
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +26,6 @@ async def async_debug_list_all_apis_and_tools(hass: HomeAssistant):
             # Try to get an instance to see the tools
             try:
                 # Create a dummy context to get the instance
-                from homeassistant.helpers.llm import LLMContext
                 context = LLMContext(
                     platform="test",
                     context=None,

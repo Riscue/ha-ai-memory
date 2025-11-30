@@ -1,6 +1,5 @@
 """Config flow for AI Memory integration."""
 import logging
-import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -8,11 +7,12 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_validation as cv
 
 from . import MEMORY_MAX_ENTRIES
 from .constants import (
     DOMAIN,
+    DEFAULT_MODEL,
+    DEFAULT_REMOTE_URL,
     ENGINE_REMOTE,
     ENGINE_TFIDF,
     ENGINE_NAMES,
@@ -97,11 +97,11 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema({
             vol.Required(
                 CONF_REMOTE_URL,
-                default="http://localhost:8000"
+                default=DEFAULT_REMOTE_URL
             ): str,
             vol.Optional(
                 CONF_MODEL_NAME,
-                default="qllama/bge-small-en-v1.5:q8_0"
+                default=DEFAULT_MODEL
             ): str,
         })
 
@@ -178,7 +178,7 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
                 "remote_url": user_input.get(CONF_REMOTE_URL),
                 "model_name": user_input.get(CONF_MODEL_NAME),
             }
-            
+
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data=data
@@ -189,11 +189,11 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
         schema = vol.Schema({
             vol.Required(
                 CONF_REMOTE_URL,
-                default=self.config_entry.data.get("remote_url", "http://localhost:8000")
+                default=self.config_entry.data.get("remote_url", DEFAULT_REMOTE_URL)
             ): str,
             vol.Optional(
                 CONF_MODEL_NAME,
-                default=self.config_entry.data.get("model_name", "qllama/bge-small-en-v1.5:q8_0")
+                default=self.config_entry.data.get("model_name", DEFAULT_MODEL)
             ): str,
         })
 

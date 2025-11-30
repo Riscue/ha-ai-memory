@@ -5,6 +5,8 @@ from typing import List, Dict, Any
 import aiohttp
 from homeassistant.core import HomeAssistant
 
+from .constants import DEFAULT_MODEL, DEFAULT_REMOTE_URL
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -14,8 +16,8 @@ class RemoteEmbeddingEngine:
     def __init__(self, hass: HomeAssistant, config_data: Dict[str, Any]):
         """Initialize the engine."""
         self.hass = hass
-        self.remote_url = config_data.get("remote_url", "http://localhost:8000")
-        self.model_name = config_data.get("model_name", "qllama/bge-small-en-v1.5:q8_0")
+        self.remote_url = config_data.get("remote_url", DEFAULT_REMOTE_URL)
+        self.model_name = config_data.get("model_name", DEFAULT_MODEL)
         self._model_loaded = False
 
     def _load_model(self):

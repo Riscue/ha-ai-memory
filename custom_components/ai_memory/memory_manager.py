@@ -7,9 +7,9 @@ from typing import List, Dict, Optional, Any
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory import ENGINE_TFIDF
-from custom_components.ai_memory.constants import DOMAIN, MEMORY_MAX_ENTRIES
-from custom_components.ai_memory.constants import DEFAULT_STORAGE_PATH
+from . import ENGINE_TFIDF
+from .constants import MEMORY_MAX_ENTRIES, DEFAULT_STORAGE_PATH
+from .embedding import EmbeddingEngine
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,21 +25,17 @@ class MemoryManager:
             config_data: dict = None
     ):
         self.hass = hass
-        self._embedding_engine = None
-        self.max_entries = max_entries
-
-        # Initialize embedding engine
-        from .embedding import EmbeddingEngine
+        self._max_entries = max_entries
         self._embedding_engine = EmbeddingEngine(hass, engine_type, config_data)
 
         # Initialize DB
-        self.db_path = DEFAULT_STORAGE_PATH
+        self._db_path = DEFAULT_STORAGE_PATH
         self._init_db()
 
     def _init_db(self):
         """Initialize database schema."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self._db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                                CREATE TABLE IF NOT EXISTS memories
@@ -69,7 +65,7 @@ class MemoryManager:
     def _execute_query(self, query: str, params: tuple = ()) -> List[Any]:
         """Execute a read query."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self._db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
                 return cursor.fetchall()
@@ -80,7 +76,7 @@ class MemoryManager:
     def _execute_commit(self, query: str, params: tuple = ()):
         """Execute a write query."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self._db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
                 conn.commit()

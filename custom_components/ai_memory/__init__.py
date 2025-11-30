@@ -5,8 +5,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory.constants import DOMAIN, ENGINE_TFIDF, MEMORY_MAX_ENTRIES
-from custom_components.ai_memory.memory_manager import MemoryManager
+from . import memory_llm_api
+from .constants import DOMAIN, ENGINE_TFIDF, MEMORY_MAX_ENTRIES
+from .memory_manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     _LOGGER.debug("Initialized Single Memory Manager")
 
     # Initialize LLM API
-    from . import memory_llm_api
     await memory_llm_api.async_setup(hass)
     _LOGGER.debug("Initialized Memory LLM API")
 

@@ -13,10 +13,7 @@ logger = logging.getLogger("Embedding-Service")
 
 app = FastAPI(title="Embedding Service (Ollama-Compatible)")
 
-# DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-DEFAULT_MODEL = "qllama/bge-small-en-v1.5:q8_0"
-# DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-# DEFAULT_MODEL = "intfloat/multilingual-e5-small"
+DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
 ENGINE_TYPE = os.getenv("EMBEDDING_ENGINE", FASTEMBED).lower()
 DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", DEFAULT_MODEL)

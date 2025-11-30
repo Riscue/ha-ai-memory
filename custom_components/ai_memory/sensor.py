@@ -55,7 +55,7 @@ class AIMemorySensor(SensorEntity):
     def extra_state_attributes(self):
         return {
             "embedding_engine": self.memory_manager._embedding_engine.engine_name,
-            "max_entries": self.memory_manager.max_entries,
+            "max_entries": self.memory_manager._max_entries,
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
