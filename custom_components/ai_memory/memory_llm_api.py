@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util.json import JsonObjectType
 
 from .constants import DOMAIN
+from .utils import format_date
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,10 +28,22 @@ class AddMemoryTool(llm.Tool):
 
     name = "add_memory"
     description = """
-    CRITICAL: Use this tool PROACTIVELY. Do not wait for the user to say "save this".
-    If the user mentions a personal fact (e.g., "I'm a fan of Fenerbahçe", "My name is Ebru"), a future plan, a preference, or a specific rule for the house, save it IMMEDIATELY.
-    - Use 'private' scope (default) for personal details to build a unique bond with the user.
-    - Use 'common' scope ONLY if the information is a general fact about the house (e.g., "The garage door is broken") that all assistants must know.
+    CRITICAL: You are a memory recorder. Your goal is to save facts for LONG-TERM retrieval.
+    Do NOT save exact quotes. instead, REWRITE the information following these rules:
+    
+    1. PERSPECTIVE NORMALIZATION:
+      - Never use "I", "me", "my" for the user.
+      - Always convert first-person statements to third-person (e.g., "I like coffee" -> "The user likes coffee").
+      - If the user's name is known, use it. If not, use "The User".
+    
+    2. TIME RESOLUTION:
+      - Never save relative time words like "tomorrow", "next week", "yesterday".
+      - ALWAYS calculate and write the ABSOLUTE DATE (YYYY-MM-DD) based on the current date provided in your system prompt.
+      - Example: If today is 2025-11-30 and user says "tomorrow", save it as "2025-12-01".
+    
+    3. SCOPE:
+      - Use 'private' for personal preferences, plans, and facts about the specific user.
+      - Use 'common' ONLY for general facts about the house/devices shared by everyone.
     """
 
     parameters = vol.Schema({
@@ -66,9 +79,24 @@ class SearchMemoryTool(llm.Tool):
 
     name = "search_memory"
     description = """
-    Use this tool whenever the user refers to past events, asks a question requiring personal context, or uses vague references like "it", "that thing", or "my team".
-    BEFORE answering a personal question (e.g., "What was my plan?", "Do you remember me?"), ALWAYS search memory first.
-    This tool searches both your 'private' memories and the 'common' house knowledge base.
+    CRITICAL: Use this tool PROACTIVELY for context retrieval.
+    When searching, formulate your query to match how facts are stored (Third-Person + Keywords).
+    
+    1. PERSPECTIVE NORMALIZATION:
+      - Never use "I", "me", "my" for the user.
+      - Always convert first-person statements to third-person (e.g., "I like coffee" -> "The user likes coffee").
+      - If the user's name is known, use it. If not, use "The User".
+    
+    2. TIME RESOLUTION:
+      - Never search relative time words like "tomorrow", "next week", "yesterday".
+      - ALWAYS calculate and write the ABSOLUTE DATE (YYYY-MM-DD) based on the current date provided in your system prompt.
+      - Example: If today is 2025-11-30 and user says "tomorrow", search it as "2025-12-01".
+    
+    3. SCOPE:
+      - Do not search for "What did I say?". 
+      - Instead, search for "User's plan for [Date]", "User's preference for...", "User's car location".
+      - If the user refers to a vague time like "last week", try to include specific topics or entities in your search query to find the relevant event.
+      - Search both 'private' and 'common' knowledge bases.
     """
 
     parameters = vol.Schema({
@@ -90,10 +118,10 @@ class SearchMemoryTool(llm.Tool):
             if not results:
                 return {"success": True, "message": "No matching memories found."}
 
-            formatted = "\n".join([
-                f"- {r['content']} (Scope: {r['metadata']['scope']})"
-                for r in results
-            ])
+            formatted = ""
+            for memory in results:
+                formatted += f"[{format_date(memory["metadata"].get("created_at", ""))}] {memory["content"]}"
+
             return {
                 "success": True,
                 "results": formatted

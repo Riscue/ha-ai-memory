@@ -1,9 +1,8 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant
-
 from custom_components.ai_memory.constants import DOMAIN
+from homeassistant.core import HomeAssistant
 
 # Mock llm module before importing memory_llm_api
 mock_llm = MagicMock()
@@ -53,6 +52,7 @@ with patch.dict("sys.modules", {
 }):
     from custom_components.ai_memory import memory_llm_api
     import importlib
+
     importlib.reload(memory_llm_api)
 
 
@@ -105,8 +105,8 @@ async def test_search_memory_tool(mock_manager):
     llm_context = MockLLMContext("agent_1")
 
     mock_manager.async_search_memory.return_value = [
-        {"content": "Result 1", "metadata": {"scope": "private"}},
-        {"content": "Result 2", "metadata": {"scope": "common"}}
+        {"content": "Result 1", "score": 0.6, "metadata": {"scope": "private"}},
+        {"content": "Result 2", "score": 0.6, "metadata": {"scope": "common"}}
     ]
 
     result = await tool.async_call(hass, tool_input, llm_context)
@@ -176,13 +176,13 @@ async def test_get_api_instance_no_manager():
 async def test_async_setup_duplicate_registration():
     """Test that duplicate registration is handled gracefully."""
     hass = MagicMock(spec=HomeAssistant)
-    
+
     # Patch the llm module used by memory_llm_api
     with patch.object(memory_llm_api, "llm") as mock_llm_module:
         # Mock llm.async_register_api to raise exception
         mock_llm_module.async_register_api.side_effect = Exception("API already registered")
-        
+
         # Should not raise exception
         await memory_llm_api.async_setup(hass)
-        
+
         mock_llm_module.async_register_api.assert_called_once()

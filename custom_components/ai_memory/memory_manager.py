@@ -9,7 +9,7 @@ import numpy as np
 from homeassistant.core import HomeAssistant
 
 from . import ENGINE_TFIDF
-from .constants import MEMORY_MAX_ENTRIES, DEFAULT_STORAGE_PATH, SIMILARITY_THRESHOLD
+from .constants import MEMORY_MAX_ENTRIES, DEFAULT_STORAGE_PATH, SIMILARITY_THRESHOLD, MEMORY_LIMIT
 from .embedding import EmbeddingEngine
 
 _LOGGER = logging.getLogger(__name__)
@@ -187,7 +187,7 @@ class MemoryManager:
         if hasattr(self.hass, 'bus'):
             self.hass.bus.async_fire("ai_memory_updated")
 
-    async def async_search_memory(self, query: str, agent_id: Optional[str], limit: int = 5) -> List[Dict]:
+    async def async_search_memory(self, query: str, agent_id: Optional[str], limit: int = MEMORY_LIMIT) -> List[Dict]:
         """Search memory using SQL filter + Vector Similarity (Numpy Optimized)."""
         if not query:
             return []
@@ -234,6 +234,9 @@ class MemoryManager:
 
                 # Numpy destekli cosine similarity çağır
                 score = self._cosine_similarity(query_vec, mem_vec)
+
+                _LOGGER.debug(
+                    f"[{score}] {content}")
 
                 # --- KRİTİK FİLTRE ---
                 # Eğer skor eşiğin altındaysa listeye hiç ekleme.
