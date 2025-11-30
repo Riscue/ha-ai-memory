@@ -201,12 +201,13 @@ async def test_search_memory_malformed_db_data(memory_manager, mock_db):
 
 async def test_cosine_similarity_edge_cases(memory_manager):
     """Test cosine similarity edge cases."""
+    import numpy as np
     # Zero vectors
-    assert memory_manager._cosine_similarity([0, 0], [0, 0]) == 0.0
+    assert memory_manager._cosine_similarity(np.array([0, 0]), np.array([0, 0])) == 0.0
     # Mismatched length
-    assert memory_manager._cosine_similarity([1], [1, 2]) == 0.0
+    assert memory_manager._cosine_similarity(np.array([1]), np.array([1, 2])) == 0.0
     # Empty
-    assert memory_manager._cosine_similarity([], []) == 0.0
+    assert memory_manager._cosine_similarity(np.array([]), np.array([])) == 0.0
 
 
 async def test_clear_memory(memory_manager, mock_db):
