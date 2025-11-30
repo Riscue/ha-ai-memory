@@ -240,7 +240,6 @@ class MemoryManager:
 
         # Filter by threshold
         results = [m for m in scored_memories[:limit] if m["score"] > 0.4]
-        print(scored_memories)
         return results
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
