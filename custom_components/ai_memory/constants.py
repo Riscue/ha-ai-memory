@@ -4,6 +4,7 @@ DOMAIN = "ai_memory"
 
 # Embedding model configuration
 MEMORY_MAX_ENTRIES = 1000
+SIMILARITY_THRESHOLD = 0.70
 
 # Embedding model configuration
 EMBEDDINGS_VECTOR_DIM = 384

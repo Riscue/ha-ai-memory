@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -112,7 +113,6 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Trigger model download
             try:
-                import aiohttp
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                             f"{remote_url}/api/pull",
@@ -136,7 +136,6 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Fetch models
         models = [DEFAULT_MODEL]
         try:
-            import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{remote_url}/api/tags", timeout=5) as response:
                     if response.status == 200:
@@ -246,7 +245,6 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
 
             # Trigger model download
             try:
-                import aiohttp
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                             f"{remote_url}/api/pull",
@@ -277,7 +275,6 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
         current_model = self.config_entry.data.get("model_name", DEFAULT_MODEL)
 
         try:
-            import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{remote_url}/api/tags", timeout=5) as response:
                     if response.status == 200:

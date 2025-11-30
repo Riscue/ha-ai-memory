@@ -5,10 +5,11 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 
+import numpy as np
 from homeassistant.core import HomeAssistant
 
 from . import ENGINE_TFIDF
-from .constants import MEMORY_MAX_ENTRIES, DEFAULT_STORAGE_PATH
+from .constants import MEMORY_MAX_ENTRIES, DEFAULT_STORAGE_PATH, SIMILARITY_THRESHOLD
 from .embedding import EmbeddingEngine
 
 _LOGGER = logging.getLogger(__name__)
@@ -219,18 +220,25 @@ class MemoryManager:
 
         # 2. Vector Similarity (Soft Filter)
         scored_memories = []
+        query_vec = np.array(query_embedding, dtype=np.float32)
+
         for content, emb_json, meta_json in rows:
             try:
-                mem_embedding = json.loads(emb_json)
-                if not mem_embedding:
+                mem_embedding_list = json.loads(emb_json)
+                if not mem_embedding_list:
                     continue
 
-                score = self._cosine_similarity(query_embedding, mem_embedding)
-                scored_memories.append({
-                    "content": content,
-                    "score": score,
-                    "metadata": json.loads(meta_json)
-                })
+                mem_vec = np.array(mem_embedding_list, dtype=np.float32)
+
+                score = self._cosine_similarity(query_vec, mem_vec)
+
+                # Filter by threshold
+                if score > SIMILARITY_THRESHOLD:
+                    scored_memories.append({
+                        "content": content,
+                        "score": float(score),
+                        "metadata": json.loads(meta_json)
+                    })
             except Exception as e:
                 _LOGGER.warning(f"Error processing memory row: {e}")
                 continue
@@ -238,24 +246,20 @@ class MemoryManager:
         # Sort and limit
         scored_memories.sort(key=lambda x: x["score"], reverse=True)
 
-        # Filter by threshold
-        results = [m for m in scored_memories[:limit] if m["score"] > 0.4]
-        return results
+        return scored_memories[:limit]
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """Calculate cosine similarity."""
-        import math
-        if not vec1 or not vec2 or len(vec1) != len(vec2):
+        if vec1.shape != vec2.shape:
             return 0.0
 
-        dot = sum(a * b for a, b in zip(vec1, vec2))
-        mag1 = math.sqrt(sum(a * a for a in vec1))
-        mag2 = math.sqrt(sum(b * b for b in vec2))
+        norm_v1 = np.linalg.norm(vec1)
+        norm_v2 = np.linalg.norm(vec2)
 
-        if mag1 == 0 or mag2 == 0:
+        if norm_v1 == 0 or norm_v2 == 0:
             return 0.0
 
-        return dot / (mag1 * mag2)
+        return np.dot(vec1, vec2) / (norm_v1 * norm_v2)
 
     async def async_get_all_memories(self, agent_id: Optional[str] = None) -> List[Dict]:
         """Get all accessible memories."""

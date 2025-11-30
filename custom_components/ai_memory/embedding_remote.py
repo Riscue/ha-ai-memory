@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any
 
 import aiohttp
+import requests
 from homeassistant.core import HomeAssistant
 
 from .constants import DEFAULT_MODEL, DEFAULT_REMOTE_URL
@@ -75,7 +76,6 @@ class RemoteEmbeddingEngine:
         
         If we are in an executor, we can create a new event loop or use `asyncio.run`.
         """
-        import requests
 
         url = f"{self.remote_url}/api/embed"
         try:
