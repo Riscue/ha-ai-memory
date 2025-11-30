@@ -188,12 +188,11 @@ class MemoryManager:
             self.hass.bus.async_fire("ai_memory_updated")
 
     async def async_search_memory(self, query: str, agent_id: Optional[str], limit: int = 5) -> List[Dict]:
-        """Search memory using SQL filter + Vector Similarity."""
+        """Search memory using SQL filter + Vector Similarity (Numpy Optimized)."""
         if not query:
             return []
 
         # 1. SQL Filter (Hard Filter)
-        # Select rows where scope is common OR (private AND agent_id matches)
         rows = await self.hass.async_add_executor_job(
             self._execute_query,
             """
@@ -218,25 +217,30 @@ class MemoryManager:
         if not query_embedding:
             return []
 
+        # Query vektörünü baştan numpy array yapıyoruz (Performans için)
+        query_vec = np.array(query_embedding, dtype=np.float32)
+
         # 2. Vector Similarity (Soft Filter)
         scored_memories = []
-        query_vec = np.array(query_embedding, dtype=np.float32)
 
         for content, emb_json, meta_json in rows:
             try:
+                # Veritabanından gelen string'i listeye, sonra numpy array'e çevir
                 mem_embedding_list = json.loads(emb_json)
                 if not mem_embedding_list:
                     continue
 
                 mem_vec = np.array(mem_embedding_list, dtype=np.float32)
 
+                # Numpy destekli cosine similarity çağır
                 score = self._cosine_similarity(query_vec, mem_vec)
 
-                # Filter by threshold
+                # --- KRİTİK FİLTRE ---
+                # Eğer skor eşiğin altındaysa listeye hiç ekleme.
                 if score > SIMILARITY_THRESHOLD:
                     scored_memories.append({
                         "content": content,
-                        "score": float(score),
+                        "score": float(score),  # Numpy float'ı native float'a çevir
                         "metadata": json.loads(meta_json)
                     })
             except Exception as e:
@@ -246,19 +250,24 @@ class MemoryManager:
         # Sort and limit
         scored_memories.sort(key=lambda x: x["score"], reverse=True)
 
+        # Threshold kontrolünü yukarıda yaptığımız için burası temizlendi
         return scored_memories[:limit]
 
     def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calculate cosine similarity."""
+        """Calculate cosine similarity using NumPy."""
+        # Vektör boyları eşit değilse 0 dön
         if vec1.shape != vec2.shape:
             return 0.0
 
+        # Norm (Vektör uzunluğu) hesapla
         norm_v1 = np.linalg.norm(vec1)
         norm_v2 = np.linalg.norm(vec2)
 
+        # Sıfıra bölme hatasını engelle
         if norm_v1 == 0 or norm_v2 == 0:
             return 0.0
 
+        # Dot Product (İç çarpım) / (Normların çarpımı)
         return np.dot(vec1, vec2) / (norm_v1 * norm_v2)
 
     async def async_get_all_memories(self, agent_id: Optional[str] = None) -> List[Dict]:
