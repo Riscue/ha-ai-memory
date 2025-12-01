@@ -1,8 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from custom_components.ai_memory.constants import DOMAIN
 from homeassistant.core import HomeAssistant
+
+from custom_components.ai_memory.constants import DOMAIN
 
 # Mock llm module before importing memory_llm_api
 mock_llm = MagicMock()
@@ -106,7 +107,10 @@ async def test_search_memory_tool(mock_manager):
 
     mock_manager.async_search_memory.return_value = [
         {"content": "Result 1", "score": 0.6, "metadata": {"scope": "private"}},
-        {"content": "Result 2", "score": 0.6, "metadata": {"scope": "common"}}
+        {"content": "Result 2", "score": 0.3, "metadata": {"scope": "common"}},
+        {"content": "Result 3", "score": 0.6,
+         "metadata": {"scope": "private", "created_at": "2011-08-12T20:17:46.384Z"}
+         },
     ]
 
     result = await tool.async_call(hass, tool_input, llm_context)

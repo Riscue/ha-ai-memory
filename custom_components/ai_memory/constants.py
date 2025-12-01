@@ -10,8 +10,8 @@ MEMORY_LIMIT = 5
 # Embedding model configuration
 EMBEDDINGS_VECTOR_DIM = 384
 
-DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
-DEFAULT_REMOTE_URL = "http://localhost:11434"
+DEFAULT_MODEL = "bge-m3"
+DEFAULT_REMOTE_URL = "http://127.0.0.1:11434"
 
 # Embedding engine types
 ENGINE_REMOTE = "remote"

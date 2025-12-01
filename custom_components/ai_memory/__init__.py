@@ -32,7 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     engine_type = entry.data.get("embedding_engine", ENGINE_TFIDF)
     max_entries = entry.data.get("max_entries", MEMORY_MAX_ENTRIES)
 
-    manager = MemoryManager(hass, engine_type, max_entries, entry.data)
+    manager = MemoryManager(hass, engine_type, max_entries, config_data=entry.data)
     await manager.async_load_memories()
 
     # Initialize embedding engine (installs dependencies if needed)

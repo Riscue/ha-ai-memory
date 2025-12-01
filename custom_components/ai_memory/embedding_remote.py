@@ -91,22 +91,6 @@ class RemoteEmbeddingEngine:
             _LOGGER.error("Remote embedding generation failed: %s", e)
             raise RuntimeError(f"Remote embedding failed: {e}")
 
-    async def async_generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding asynchronously."""
-        url = f"{self.remote_url}/api/embed"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                        url,
-                        json={"model": self.model_name, "input": text}
-                ) as response:
-                    response.raise_for_status()
-                    data = await response.json()
-                    return data["embeddings"][0]
-        except Exception as e:
-            _LOGGER.error("Remote embedding generation failed: %s", e)
-            raise RuntimeError(f"Remote embedding failed: {e}")
-
     def update_vocabulary(self, text: str):
         """No-op for Remote Engine."""
         pass

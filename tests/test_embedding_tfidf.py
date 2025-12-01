@@ -152,7 +152,7 @@ class TestTFIDFEmbeddingEngine:
         engine = TFIDFEmbeddingEngine(mock_hass, vector_dim=384)
         
         # Generate embedding
-        embedding = await engine.async_generate_embedding("hello world test")
+        embedding = engine.generate_embedding("hello world test")
         
         # Check output
         assert len(embedding) == 384
@@ -164,9 +164,9 @@ class TestTFIDFEmbeddingEngine:
         engine = TFIDFEmbeddingEngine(mock_hass, vector_dim=384)
         
         # Use larger text samples for more reliable similarity testing
-        emb1 = await engine.async_generate_embedding("I love programming in Python and building web applications")
-        emb2 = await engine.async_generate_embedding("I enjoy coding in Python and creating web apps")
-        emb3 = await engine.async_generate_embedding("The weather is nice today with sunshine")
+        emb1 = engine.generate_embedding("I love programming in Python and building web applications")
+        emb2 = engine.generate_embedding("I enjoy coding in Python and creating web apps")
+        emb3 = engine.generate_embedding("The weather is nice today with sunshine")
         
         # Calculate cosine similarity
         def cosine_similarity(v1, v2):

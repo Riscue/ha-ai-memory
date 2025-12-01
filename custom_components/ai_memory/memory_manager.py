@@ -23,6 +23,7 @@ class MemoryManager:
             hass: HomeAssistant,
             engine_type: str = ENGINE_TFIDF,
             max_entries: int = MEMORY_MAX_ENTRIES,
+            db_path: str = DEFAULT_STORAGE_PATH,
             config_data: dict = None
     ):
         self.hass = hass
@@ -30,7 +31,7 @@ class MemoryManager:
         self._embedding_engine = EmbeddingEngine(hass, engine_type, config_data)
 
         # Initialize DB
-        self._db_path = DEFAULT_STORAGE_PATH
+        self._db_path = db_path
         self._init_db()
 
     def _init_db(self):
@@ -187,7 +188,11 @@ class MemoryManager:
         if hasattr(self.hass, 'bus'):
             self.hass.bus.async_fire("ai_memory_updated")
 
-    async def async_search_memory(self, query: str, agent_id: Optional[str], limit: int = MEMORY_LIMIT) -> List[Dict]:
+    async def async_search_memory(self,
+                                  query: str,
+                                  agent_id: Optional[str],
+                                  limit: int = MEMORY_LIMIT,
+                                  min_score: float = SIMILARITY_THRESHOLD) -> List[Dict]:
         """Search memory using SQL filter + Vector Similarity (Numpy Optimized)."""
         if not query:
             return []
@@ -240,7 +245,7 @@ class MemoryManager:
 
                 # --- KRİTİK FİLTRE ---
                 # Eğer skor eşiğin altındaysa listeye hiç ekleme.
-                if score > SIMILARITY_THRESHOLD:
+                if score > min_score:
                     scored_memories.append({
                         "content": content,
                         "score": float(score),  # Numpy float'ı native float'a çevir
