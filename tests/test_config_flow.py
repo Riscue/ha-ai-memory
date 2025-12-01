@@ -91,9 +91,8 @@ async def test_form_remote(hass: HomeAssistant) -> None:
 
     # Mock network calls for model selection and pull
     with patch("aiohttp.ClientSession.get") as mock_get, \
-         patch("aiohttp.ClientSession.post") as mock_post, \
-         patch("custom_components.ai_memory.async_setup_entry", return_value=True) as mock_setup_entry:
-        
+            patch("aiohttp.ClientSession.post") as mock_post, \
+            patch("custom_components.ai_memory.async_setup_entry", return_value=True) as mock_setup_entry:
         # Mock tags response
         mock_get_response = MagicMock()
         mock_get_response.status = 200
@@ -156,8 +155,7 @@ async def test_options_flow_remote(hass: HomeAssistant, mock_config_entry) -> No
 
     # Mock network calls for model selection and pull
     with patch("aiohttp.ClientSession.get") as mock_get, \
-         patch("aiohttp.ClientSession.post") as mock_post:
-        
+            patch("aiohttp.ClientSession.post") as mock_post:
         # Mock tags response
         mock_get_response = MagicMock()
         mock_get_response.status = 200

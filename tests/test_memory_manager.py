@@ -1,5 +1,6 @@
 """Tests for Memory Manager with SQLite."""
 import json
+from datetime import datetime
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -92,18 +93,19 @@ async def test_async_get_memory_counts(mock_hass, memory_manager, mock_db):
         ("common", 1),
         ("private", 1)
     ]
-    
+
     counts = await memory_manager.async_get_memory_counts()
     assert counts["common"] == 1
     assert counts["private"] == 1
     assert counts["total"] == 2
 
+
 async def test_async_search_memory(memory_manager, mock_db):
     """Test search executes SELECT and filters."""
     # Mock SELECT return
     mock_db.fetchall.return_value = [
-        ("Content A", json.dumps([1.0, 0.0, 0.0]), json.dumps({"scope": "private"})),
-        ("Content B", json.dumps([-1.0, 0.0, 0.0]), json.dumps({"scope": "common"}))
+        ("Content A", json.dumps([1.0, 0.0, 0.0]), "private", "agent_1", datetime.now()),
+        ("Content B", json.dumps([-1.0, 0.0, 0.0]), "common", "agent_1", datetime.now())
     ]
 
     results = await memory_manager.async_search_memory("query", "agent_1")
@@ -116,22 +118,6 @@ async def test_async_search_memory(memory_manager, mock_db):
     # Verify filtering (Content A should match [1,0,0], Content B should not [-1,0,0])
     assert len(results) == 1
     assert results[0]["content"] == "Content A"
-
-
-async def test_get_all_memories_sql(memory_manager, mock_db):
-    """Test get all executes SELECT."""
-    mock_db.fetchall.return_value = [
-        ("Content A", json.dumps({"scope": "private"}))
-    ]
-
-    results = await memory_manager.async_get_all_memories("agent_1")
-
-    assert len(results) == 1
-    assert results[0]["content"] == "Content A"
-
-    # Verify SELECT
-    select_call = [c for c in mock_db.execute.call_args_list if "SELECT" in c[0][0]]
-    assert len(select_call) == 1
 
 
 async def test_init_db_failure(mock_hass):
@@ -190,8 +176,8 @@ async def test_search_memory_embedding_failure(memory_manager, mock_embedding_en
 async def test_search_memory_malformed_db_data(memory_manager, mock_db):
     """Test search with malformed JSON in DB."""
     mock_db.fetchall.return_value = [
-        ("Content A", "invalid_json", "{}"),
-        ("Content B", "[1.0, 0.0]", "{}")  # Mismatched dimension (assuming query is 3D)
+        ("Content A", "invalid_json", "private", "agent_1", datetime.now()),
+        ("Content B", "[1.0, 0.0]", "common", "agent_1", datetime.now())  # Mismatched dimension (assuming query is 3D)
     ]
 
     results = await memory_manager.async_search_memory("query", "agent_1")
@@ -210,12 +196,6 @@ async def test_cosine_similarity_edge_cases(memory_manager):
     assert memory_manager._cosine_similarity(np.array([]), np.array([])) == 0.0
 
 
-async def test_clear_memory(memory_manager, mock_db):
-    """Test clearing memory."""
-    await memory_manager.async_clear_memory()
-    mock_db.execute.assert_called_with("DELETE FROM memories", ())
-
-
 async def test_ensure_directory_exists_failure(mock_hass):
     """Test directory creation failure."""
     with patch("os.makedirs", side_effect=Exception("Permission Denied")):
@@ -227,14 +207,15 @@ async def test_ensure_directory_exists_failure(mock_hass):
             # It catches exception and logs error, so initialization should proceed (or at least not crash)
             # But wait, _ensure_directory_exists returns False. The init doesn't check return value.
             # So it just logs.
+
     async def test_async_initialize_failure(memory_manager, mock_embedding_engine):
         """Test initialization failure when remote is down."""
         # Mock engine to have async_get_version returning False
         mock_embedding_engine._engine = AsyncMock()
         mock_embedding_engine._engine.async_get_version.return_value = False
-        
+
         # We need to re-assign the engine to the manager's internal engine wrapper
         memory_manager._embedding_engine = mock_embedding_engine
-        
+
         with pytest.raises(RuntimeError, match="Remote embedding service is not reachable"):
             await memory_manager.async_initialize()

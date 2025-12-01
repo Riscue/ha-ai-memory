@@ -1,7 +1,10 @@
 """Tests for Remote embedding engine."""
-import pytest
 from unittest.mock import Mock, patch, AsyncMock
+
+import pytest
+
 from custom_components.ai_memory.embedding_remote import RemoteEmbeddingEngine
+
 
 class TestRemoteEmbeddingEngine:
     """Test Remote engine."""

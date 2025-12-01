@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_socket import enable_socket, socket_allow_hosts
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -10,6 +11,14 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable custom integrations defined in the test dir."""
+    yield
+
+
+@pytest.fixture(scope="function", autouse=True)
+def enable_socket_for_ollama():
+    """Ensure socket is enabled for Ollama tests."""
+    enable_socket()
+    socket_allow_hosts(["localhost", "127.0.0.1"], allow_unix_socket=True)
     yield
 
 

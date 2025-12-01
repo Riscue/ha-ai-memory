@@ -28,7 +28,7 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     sensor = sensors[0]
     assert isinstance(sensor, AIMemorySensor)
     assert sensor.state == "Active"
-    
+
     # Test update
     await sensor.async_update()
     assert sensor.extra_state_attributes["memory_counts"] == {"total": 10}
@@ -40,7 +40,7 @@ async def test_sensor_update_event(hass: HomeAssistant, mock_config_entry):
     mock_manager = MagicMock()
     mock_manager._max_entries = 100
     mock_manager._embedding_engine.engine_name = "test_engine"
-    
+
     hass.data[DOMAIN] = {"manager": mock_manager}
 
     sensor = AIMemorySensor(hass, mock_config_entry, mock_manager)

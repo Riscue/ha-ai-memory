@@ -29,19 +29,25 @@ class AddMemoryTool(llm.Tool):
     name = "add_memory"
     description = """
     CRITICAL: You are a memory recorder. Your goal is to save facts for LONG-TERM retrieval.
-    Do NOT save exact quotes. instead, REWRITE the information following these rules:
+    Do NOT save exact quotes. Instead, REWRITE the information into a self-contained fact following these rules:
     
     1. PERSPECTIVE NORMALIZATION:
       - Never use "I", "me", "my" for the user.
       - Always convert first-person statements to third-person (e.g., "I like coffee" -> "The user likes coffee").
-      - If the user's name is known, use it. If not, use "The User".
+      - If the user's name is known, use the name explicitly instead of "The User".
     
     2. TIME RESOLUTION:
       - Never save relative time words like "tomorrow", "next week", "yesterday".
       - ALWAYS calculate and write the ABSOLUTE DATE (YYYY-MM-DD) based on the current date provided in your system prompt.
       - Example: If today is 2025-11-30 and user says "tomorrow", save it as "2025-12-01".
     
-    3. SCOPE:
+    3. CONTEXT RESOLUTION (CRITICAL):
+      - The memory must make sense in isolation 6 months from now.
+      - Replace vague pronouns like "it", "that", "there" with specific nouns.
+      - Bad: "The user wants to change it."
+      - Good: "The user wants to change the kitchen light bulb."
+    
+    4. SCOPE:
       - Use 'private' for personal preferences, plans, and facts about the specific user.
       - Use 'common' ONLY for general facts about the house/devices shared by everyone.
     """
@@ -61,14 +67,15 @@ class AddMemoryTool(llm.Tool):
         scope = tool_input.tool_args.get("scope", "private")
 
         # Determine agent_id
-        agent_id = llm_context.assistant
+        agent_id = llm_context.platform
         if scope == "private" and not agent_id:
             # Fallback for testing or non-agent calls
             agent_id = "unknown_agent"
 
         try:
             await self.memory_manager.async_add_memory(content, scope, agent_id)
-            return {"success": True, "message": f"Saved to {scope} memory."}
+            _LOGGER.debug(f"Saved to {scope} ({agent_id}) memory: {content}")
+            return {"success": True, "message": f"Saved to {scope} ({agent_id}) memory."}
         except Exception as e:
             _LOGGER.error(f"Error adding memory: {e}")
             raise Exception(f"Error: {e}")
@@ -80,23 +87,22 @@ class SearchMemoryTool(llm.Tool):
     name = "search_memory"
     description = """
     CRITICAL: Use this tool PROACTIVELY for context retrieval.
-    When searching, formulate your query to match how facts are stored (Third-Person + Keywords).
+    Your goal is to generate a search query that matches how facts are stored in the database.
     
     1. PERSPECTIVE NORMALIZATION:
-      - Never use "I", "me", "my" for the user.
-      - Always convert first-person statements to third-person (e.g., "I like coffee" -> "The user likes coffee").
-      - If the user's name is known, use it. If not, use "The User".
+      - Internalize the query. Never use "I", "me", "my".
+      - Convert first-person questions into third-person statements.
+      - USE THE USER'S NAME if available.
     
     2. TIME RESOLUTION:
-      - Never search relative time words like "tomorrow", "next week", "yesterday".
-      - ALWAYS calculate and write the ABSOLUTE DATE (YYYY-MM-DD) based on the current date provided in your system prompt.
-      - Example: If today is 2025-11-30 and user says "tomorrow", search it as "2025-12-01".
+      - Never search for relative terms like "tomorrow", "yesterday".
+      - ALWAYS calculate the ABSOLUTE DATE (YYYY-MM-DD) based on the current system time.
+      - Example: User asks "What is the plan for tomorrow?" -> You search: "Plan for 2025-12-01".
     
-    3. SCOPE:
-      - Do not search for "What did I say?". 
-      - Instead, search for "User's plan for [Date]", "User's preference for...", "User's car location".
-      - If the user refers to a vague time like "last week", try to include specific topics or entities in your search query to find the relevant event.
-      - Search both 'private' and 'common' knowledge bases.
+    3. KEYWORD OPTIMIZATION:
+      - Vector search works best with keywords, not long questions.
+      - Instead of searching "What did the user say about the car?", search for "User's car preferences" or "Car status".
+      - Strip unnecessary conversational filler words.
     """
 
     parameters = vol.Schema({
@@ -110,7 +116,7 @@ class SearchMemoryTool(llm.Tool):
             self, hass: HomeAssistant, tool_input: llm.ToolInput, llm_context: llm.LLMContext
     ) -> JsonObjectType:
         query = tool_input.tool_args.get("query")
-        agent_id = llm_context.assistant
+        agent_id = llm_context.platform
         _LOGGER.debug(f"AI Memory (search_memory): {query}")
 
         try:
@@ -120,7 +126,7 @@ class SearchMemoryTool(llm.Tool):
 
             formatted = ""
             for memory in results:
-                formatted += f"[{format_date(memory["metadata"].get("created_at", ""))}] {memory["content"]}"
+                formatted += f"[{format_date(memory["created_at"])}] {memory["content"]}"
 
             return {
                 "success": True,

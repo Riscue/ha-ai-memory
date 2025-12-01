@@ -33,7 +33,6 @@ async def test_setup_entry_creates_single_manager(hass: HomeAssistant, mock_conf
                 "custom_components.ai_memory.memory_llm_api": mock_memory_api
             }):
         mock_instance = mock_manager_cls.return_value
-        mock_instance.async_load_memories = AsyncMock()
         mock_instance.async_initialize = AsyncMock()
 
         assert await async_setup_entry(hass, mock_config_entry)
@@ -41,7 +40,6 @@ async def test_setup_entry_creates_single_manager(hass: HomeAssistant, mock_conf
         # Verify single manager created and stored
         assert "manager" in hass.data[DOMAIN]
         assert hass.data[DOMAIN]["manager"] == mock_instance
-        mock_instance.async_load_memories.assert_called_once()
 
 
 async def test_setup_entry_already_initialized(hass: HomeAssistant, mock_config_entry):

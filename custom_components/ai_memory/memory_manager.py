@@ -39,27 +39,9 @@ class MemoryManager:
         try:
             with sqlite3.connect(self._db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                               CREATE TABLE IF NOT EXISTS memories
-                               (
-                                   id
-                                   TEXT
-                                   PRIMARY
-                                   KEY,
-                                   content
-                                   TEXT,
-                                   embedding
-                                   TEXT,
-                                   scope
-                                   TEXT,
-                                   agent_id
-                                   TEXT,
-                                   created_at
-                                   TEXT,
-                                   metadata
-                                   TEXT
-                               )
-                               """)
+                cursor.execute(
+                    "CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, content TEXT, embedding TEXT, scope TEXT, agent_id TEXT, created_at TEXT)"
+                )
                 conn.commit()
         except Exception as e:
             _LOGGER.error(f"Failed to initialize database: {e}")
@@ -84,10 +66,6 @@ class MemoryManager:
                 conn.commit()
         except Exception as e:
             _LOGGER.error(f"Database write error: {e}")
-
-    async def async_load_memories(self):
-        """No-op for SQLite (data is on disk)."""
-        pass
 
     async def async_get_memory_counts(self) -> Dict[str, int]:
         """Get counts of memories by scope."""
@@ -134,7 +112,8 @@ class MemoryManager:
 
         # Check limit (simplistic check)
         count_res = await self.hass.async_add_executor_job(
-            self._execute_query, "SELECT COUNT(*) FROM memories"
+            self._execute_query,
+            "SELECT COUNT(*) FROM memories"
         )
         if count_res and count_res[0][0] >= self._max_entries:
             # Remove oldest
@@ -153,30 +132,19 @@ class MemoryManager:
         # Prepare data
         mem_id = str(uuid.uuid4())
         created_at = datetime.now().isoformat()
-        metadata = {
-            "type": "memory",
-            "scope": scope,
-            "agent_id": agent_id,
-            "created_at": created_at
-        }
 
         await self.hass.async_add_executor_job(
             self._execute_commit,
-            """
-            INSERT INTO memories (id, content, embedding, scope, agent_id, created_at, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
+            "INSERT INTO memories (id, content, embedding, scope, agent_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 mem_id,
                 content.strip(),
                 json.dumps(embedding),
                 scope,
                 agent_id,
-                created_at,
-                json.dumps(metadata)
+                created_at
             )
         )
-        _LOGGER.debug(f"Added memory to DB (scope={scope}): {content[:30]}...")
 
         # Update vocabulary for TF-IDF engine (improves future embeddings)
         if self._embedding_engine:
@@ -188,10 +156,7 @@ class MemoryManager:
         if hasattr(self.hass, 'bus'):
             self.hass.bus.async_fire("ai_memory_updated")
 
-    async def async_search_memory(self,
-                                  query: str,
-                                  agent_id: Optional[str],
-                                  limit: int = MEMORY_LIMIT,
+    async def async_search_memory(self, query: str, agent_id: Optional[str], limit: int = MEMORY_LIMIT,
                                   min_score: float = SIMILARITY_THRESHOLD) -> List[Dict]:
         """Search memory using SQL filter + Vector Similarity (Numpy Optimized)."""
         if not query:
@@ -200,12 +165,7 @@ class MemoryManager:
         # 1. SQL Filter (Hard Filter)
         rows = await self.hass.async_add_executor_job(
             self._execute_query,
-            """
-            SELECT content, embedding, metadata
-            FROM memories
-            WHERE scope = 'common'
-               OR (scope = 'private' AND agent_id = ?)
-            """,
+            "SELECT content, embedding, scope, agent_id, created_at FROM memories WHERE scope = 'common' OR (scope = 'private' AND agent_id = ?)",
             (agent_id,)
         )
 
@@ -228,7 +188,7 @@ class MemoryManager:
         # 2. Vector Similarity (Soft Filter)
         scored_memories = []
 
-        for content, emb_json, meta_json in rows:
+        for content, emb_json, scope, agent_id, created_at in rows:
             try:
                 # Veritabanından gelen string'i listeye, sonra numpy array'e çevir
                 mem_embedding_list = json.loads(emb_json)
@@ -240,16 +200,17 @@ class MemoryManager:
                 # Numpy destekli cosine similarity çağır
                 score = self._cosine_similarity(query_vec, mem_vec)
 
-                _LOGGER.debug(
-                    f"[{score}] {content}")
+                _LOGGER.debug(f"[{score}] {content}")
 
                 # --- KRİTİK FİLTRE ---
                 # Eğer skor eşiğin altındaysa listeye hiç ekleme.
                 if score > min_score:
                     scored_memories.append({
                         "content": content,
-                        "score": float(score),  # Numpy float'ı native float'a çevir
-                        "metadata": json.loads(meta_json)
+                        "score": float(score),
+                        "scope": scope,
+                        "agent_id": agent_id,
+                        "created_at": created_at
                     })
             except Exception as e:
                 _LOGGER.warning(f"Error processing memory row: {e}")
@@ -277,34 +238,3 @@ class MemoryManager:
 
         # Dot Product (İç çarpım) / (Normların çarpımı)
         return np.dot(vec1, vec2) / (norm_v1 * norm_v2)
-
-    async def async_get_all_memories(self, agent_id: Optional[str] = None) -> List[Dict]:
-        """Get all accessible memories."""
-        rows = await self.hass.async_add_executor_job(
-            self._execute_query,
-            """
-            SELECT content, metadata
-            FROM memories
-            WHERE scope = 'common'
-               OR (scope = 'private' AND agent_id = ?)
-            ORDER BY created_at DESC
-            """,
-            (agent_id,)
-        )
-
-        results = []
-        for content, meta_json in rows:
-            try:
-                results.append({
-                    "content": content,
-                    "metadata": json.loads(meta_json)
-                })
-            except:
-                pass
-        return results
-
-    async def async_clear_memory(self):
-        """Clear all memories."""
-        await self.hass.async_add_executor_job(
-            self._execute_commit, "DELETE FROM memories"
-        )

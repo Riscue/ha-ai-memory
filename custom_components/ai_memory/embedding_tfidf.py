@@ -1,12 +1,12 @@
 """TF-IDF based embedding engine for AI Memory (stdlib only, no dependencies)."""
 import json
 import logging
+import math
 import os
 import re
 from collections import Counter, defaultdict
 from typing import List, Dict
 
-import math
 from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)

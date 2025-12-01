@@ -30,8 +30,8 @@ class MockToolInput:
 
 
 class MockLLMContext:
-    def __init__(self, assistant):
-        self.assistant = assistant
+    def __init__(self, platform):
+        self.platform = platform
 
 
 class MockAPIInstance:
@@ -106,11 +106,12 @@ async def test_search_memory_tool(mock_manager):
     llm_context = MockLLMContext("agent_1")
 
     mock_manager.async_search_memory.return_value = [
-        {"content": "Result 1", "score": 0.6, "metadata": {"scope": "private"}},
-        {"content": "Result 2", "score": 0.3, "metadata": {"scope": "common"}},
-        {"content": "Result 3", "score": 0.6,
-         "metadata": {"scope": "private", "created_at": "2011-08-12T20:17:46.384Z"}
-         },
+        {"content": "Result 1", "score": 0.6, "scope": "private", "agent_id": "agent_1",
+         "created_at": "2011-08-12T20:17:46.384Z"},
+        {"content": "Result 2", "score": 0.3, "scope": "common", "agent_id": "",
+         "created_at": "2011-08-12T20:17:46.384Z"},
+        {"content": "Result 3", "score": 0.6, "scope": "private", "agent_id": "agent_1",
+         "created_at": "2011-08-12T20:17:46.384Z"},
     ]
 
     result = await tool.async_call(hass, tool_input, llm_context)
