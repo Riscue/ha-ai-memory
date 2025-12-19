@@ -27,30 +27,7 @@ class AddMemoryTool(llm.Tool):
     """Tool to add information to memory."""
 
     name = "add_memory"
-    description = """
-    CRITICAL: You are a memory recorder. Your goal is to save facts for LONG-TERM retrieval.
-    Do NOT save exact quotes. Instead, REWRITE the information into a self-contained fact following these rules:
-    
-    1. PERSPECTIVE NORMALIZATION:
-      - Never use "I", "me", "my" for the user.
-      - Always convert first-person statements to third-person (e.g., "I like coffee" -> "The user likes coffee").
-      - If the user's name is known, use the name explicitly instead of "The User".
-    
-    2. TIME RESOLUTION:
-      - Never save relative time words like "tomorrow", "next week", "yesterday".
-      - ALWAYS calculate and write the ABSOLUTE DATE (YYYY-MM-DD) based on the current date provided in your system prompt.
-      - Example: If today is 2025-11-30 and user says "tomorrow", save it as "2025-12-01".
-    
-    3. CONTEXT RESOLUTION (CRITICAL):
-      - The memory must make sense in isolation 6 months from now.
-      - Replace vague pronouns like "it", "that", "there" with specific nouns.
-      - Bad: "The user wants to change it."
-      - Good: "The user wants to change the kitchen light bulb."
-    
-    4. SCOPE:
-      - Use 'private' for personal preferences, plans, and facts about the specific user.
-      - Use 'common' ONLY for general facts about the house/devices shared by everyone.
-    """
+    description = ""
 
     parameters = vol.Schema({
         vol.Required("content"): str,
@@ -85,25 +62,7 @@ class SearchMemoryTool(llm.Tool):
     """Tool to search memory."""
 
     name = "search_memory"
-    description = """
-    CRITICAL: Use this tool PROACTIVELY for context retrieval.
-    Your goal is to generate a search query that matches how facts are stored in the database.
-    
-    1. PERSPECTIVE NORMALIZATION:
-      - Internalize the query. Never use "I", "me", "my".
-      - Convert first-person questions into third-person statements.
-      - USE THE USER'S NAME if available.
-    
-    2. TIME RESOLUTION:
-      - Never search for relative terms like "tomorrow", "yesterday".
-      - ALWAYS calculate the ABSOLUTE DATE (YYYY-MM-DD) based on the current system time.
-      - Example: User asks "What is the plan for tomorrow?" -> You search: "Plan for 2025-12-01".
-    
-    3. KEYWORD OPTIMIZATION:
-      - Vector search works best with keywords, not long questions.
-      - Instead of searching "What did the user say about the car?", search for "User's car preferences" or "Car status".
-      - Strip unnecessary conversational filler words.
-    """
+    description = ""
 
     parameters = vol.Schema({
         vol.Required("query"): str,
@@ -157,7 +116,30 @@ class MemoryAPI(llm.API):
 
         return llm.APIInstance(
             api=self,
-            api_prompt="Use tools to manage memory. Prefer 'private' scope unless asked to share.",
+            api_prompt="""You only use two tools: search_memory and add_memory.
+GENERAL
+- Decide only whether to SEARCH, ADD, or IGNORE memory
+- Never simulate memory in conversation
+SEARCH
+- Call search_memory before relying on past context
+- Use third-person perspective
+- Resolve all relative time to absolute date (YYYY-MM-DD)
+- Use short, keyword-based queries
+ADD
+- Call add_memory only for long-term, stable, reusable facts
+- Never store temporary, emotional, or sensor-based information
+WRITE RULES (MANDATORY)
+- Third-person only, no "I / me / my"
+- Use the user’s name if known, otherwise "The user"
+- Always resolve relative time to absolute date
+- Replace vague references with explicit nouns
+- Write concise, factual statements
+- No quotes, no conversational tone
+SCOPE
+- private: user preferences, habits, personal facts
+- common: shared house or device facts only
+Never claim memory unless it was retrieved via search_memory.
+            """,
             llm_context=llm_context,
             tools=tools,
         )
