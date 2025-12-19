@@ -1,7 +1,7 @@
 # 🧠 AI Long Term Memory for Home Assistant
 
 [![Home Assistant](https://img.shields.io/badge/home%20assistant-%2341BDF5.svg?style=for-the-badge&logo=home-assistant&logoColor=white)](https://home-assistant.io)
-[![hacs](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/default)
+[![hacs](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://www.hacs.xyz/docs/faq/custom_repositories/)
 [![License][license-shield]](LICENSE.md)
 
 [license-shield]: https://img.shields.io/github/license/Riscue/ha-ai-memory.svg?style=for-the-badge
@@ -31,6 +31,8 @@ conversations.
 ## 🚀 Installation
 
 ### HACS Installation (Recommended)
+
+[HACS Custom Repository Installation](https://www.hacs.xyz/docs/faq/custom_repositories/)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Riscue&repository=ha-ai-memory)
 

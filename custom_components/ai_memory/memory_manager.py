@@ -200,11 +200,10 @@ class MemoryManager:
                 # Numpy destekli cosine similarity çağır
                 score = self._cosine_similarity(query_vec, mem_vec)
 
-                _LOGGER.debug(f"[{score}] {content}")
-
                 # --- KRİTİK FİLTRE ---
                 # Eğer skor eşiğin altındaysa listeye hiç ekleme.
                 if score > min_score:
+                    _LOGGER.debug(f"[{score}] {content}")
                     scored_memories.append({
                         "content": content,
                         "score": float(score),
