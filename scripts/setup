@@ -4,7 +4,7 @@ set -e
 
 pip install --upgrade uv==0.9.6
 
-uv venv --clear --python=3.13.2 homeassistant
+uv venv --clear --python=3.14.3 homeassistant
 
 source homeassistant/bin/activate
 
