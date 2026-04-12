@@ -33,7 +33,7 @@ class TestEmbeddingEngine:
         assert engine._engine_type == ENGINE_REMOTE
         assert engine._initialized is False
 
-    @patch("custom_components.ai_memory.embedding.EmbeddingEngine._create_engine")
+    @patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine._create_engine")
     async def test_initialize_engine_success(self, mock_create, mock_hass):
         """Test successful initialization."""
         mock_engine_instance = MagicMock()
@@ -47,7 +47,7 @@ class TestEmbeddingEngine:
         assert engine._engine_name == ENGINE_TFIDF
         mock_create.assert_called_once_with(ENGINE_TFIDF)
 
-    @patch("custom_components.ai_memory.embedding.EmbeddingEngine._create_engine")
+    @patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine._create_engine")
     async def test_initialize_engine_fallback(self, mock_create, mock_hass):
         """Test strict fallback to TF-IDF."""
         # First attempt (Remote) fails, Second (TF-IDF) succeeds
@@ -71,7 +71,7 @@ class TestEmbeddingEngine:
         mock_create.assert_any_call(ENGINE_REMOTE)
         mock_create.assert_called_with(ENGINE_TFIDF)
 
-    @patch("custom_components.ai_memory.embedding.EmbeddingEngine._create_engine")
+    @patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine._create_engine")
     async def test_initialize_engine_all_fail(self, mock_create, mock_hass):
         """Test when all engines fail."""
         mock_create.return_value = None
@@ -90,7 +90,7 @@ class TestEmbeddingEngine:
         result = engine._create_engine("unknown_engine")
         assert result is None
 
-    @patch("custom_components.ai_memory.embedding_tfidf.TFIDFEmbeddingEngine")
+    @patch("custom_components.ai_memory.embedding.tfidf.TFIDFEmbeddingEngine")
     async def test_generate_embedding_delegates(self, mock_tfidf, mock_hass):
         """Test generate_embedding delegates to selected engine."""
         engine = EmbeddingEngine(mock_hass, ENGINE_TFIDF)
@@ -152,7 +152,7 @@ class TestEmbeddingEngine:
             await engine.async_update_vocabulary("test")
             mock_init.assert_called_once()
 
-    @patch("custom_components.ai_memory.embedding.EmbeddingEngine._create_engine")
+    @patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine._create_engine")
     async def test_initialize_engine_import_error(self, mock_create, mock_hass):
         """Test engine creation import error."""
         # Simulate ImportError during creation
@@ -168,7 +168,7 @@ class TestEmbeddingEngine:
         """Test _create_engine handles ImportError."""
         engine = EmbeddingEngine(mock_hass)
 
-        with patch.dict("sys.modules", {"custom_components.ai_memory.embedding_tfidf": None}):
+        with patch.dict("sys.modules", {"custom_components.ai_memory.embedding.tfidf": None}):
             # This is tricky because we need to make the import fail.
             # A simpler way is to patch builtins.__import__ or just trust the logic.
             # Or we can patch the specific module import inside the method if possible.
@@ -178,10 +178,10 @@ class TestEmbeddingEngine:
             pass
 
     async def test_async_generate_embedding_empty(self, mock_hass):
-        """Test generating embedding for empty text."""
+        """Test generating embedding for empty text returns empty list."""
         engine = EmbeddingEngine(mock_hass)
         result = await engine.async_generate_embedding("")
-        assert result == [0.0] * 384  # Assuming default dim
+        assert result == []  # Empty text returns empty, callers handle it
 
     async def test_initialize_already_initialized(self, mock_hass):
         """Test async_initialize when already initialized."""

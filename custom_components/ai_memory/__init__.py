@@ -1,15 +1,24 @@
 """AI Long Term Memory component."""
 import logging
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 
 from . import memory_llm_api
 from .constants import DOMAIN, ENGINE_TFIDF, MEMORY_MAX_ENTRIES
-from .memory_manager import MemoryManager
+from .memory.manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
+
+SERVICE_ADD_MEMORY = "add_memory"
+SERVICE_CLEAR_MEMORY = "clear_memory"
+SERVICE_LIST_MEMORIES = "list_memories"
+
+ADD_MEMORY_SCHEMA = vol.Schema({
+    vol.Required("text"): str,
+})
 
 
 async def async_setup(hass: HomeAssistant, config: dict):
@@ -34,7 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     manager = MemoryManager(hass, engine_type, max_entries, config_data=entry.data)
 
-    # Initialize embedding engine (installs dependencies if needed)
+    # Initialize embedding engine
     await manager.async_initialize()
 
     hass.data[DOMAIN]["manager"] = manager
@@ -47,11 +56,52 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Forward setup
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
 
-    # Register services (Simplified)
-    # _register_services(hass) # TODO: Update services to use new manager
+    # Register services
+    _register_services(hass)
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
+
+
+def _register_services(hass: HomeAssistant):
+    """Register HA services for AI Memory."""
+
+    async def handle_add_memory(call: ServiceCall):
+        """Handle add_memory service call."""
+        manager = hass.data.get(DOMAIN, {}).get("manager")
+        if not manager:
+            _LOGGER.error("Memory manager not initialized")
+            return
+
+        text = call.data.get("text", "")
+        await manager.async_add_memory(text, "common")
+
+    async def handle_clear_memory(call: ServiceCall):
+        """Handle clear_memory service call."""
+        manager = hass.data.get(DOMAIN, {}).get("manager")
+        if not manager:
+            _LOGGER.error("Memory manager not initialized")
+            return
+
+        await hass.async_add_executor_job(
+            manager._store.execute_commit,
+            "DELETE FROM memories"
+        )
+        _LOGGER.info("All memories cleared")
+
+    async def handle_list_memories(call: ServiceCall):
+        """Handle list_memories service call."""
+        manager = hass.data.get(DOMAIN, {}).get("manager")
+        if not manager:
+            _LOGGER.error("Memory manager not initialized")
+            return
+
+        counts = await manager.async_get_memory_counts()
+        _LOGGER.info("Memory counts: %s", counts)
+
+    hass.services.async_register(DOMAIN, SERVICE_ADD_MEMORY, handle_add_memory, schema=ADD_MEMORY_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_MEMORY, handle_clear_memory)
+    hass.services.async_register(DOMAIN, SERVICE_LIST_MEMORIES, handle_list_memories)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry):
@@ -64,6 +114,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR])
 
     if unload_ok:
-        hass.data[DOMAIN].pop("manager", None)
+        manager = hass.data[DOMAIN].pop("manager", None)
+        if manager:
+            manager.close()
+
+        # Remove services
+        for service in [SERVICE_ADD_MEMORY, SERVICE_CLEAR_MEMORY, SERVICE_LIST_MEMORIES]:
+            hass.services.async_remove(DOMAIN, service)
 
     return unload_ok

@@ -24,12 +24,18 @@ _LOGGER = logging.getLogger(__name__)
 CONF_EMBEDDING_ENGINE = "embedding_engine"
 CONF_REMOTE_URL = "remote_url"
 CONF_MODEL_NAME = "model_name"
+CONF_IDENTITY_TEXT = "identity_text"
+
+
+def _validate_url(url: str) -> bool:
+    """Basic URL format validation."""
+    return url.startswith("http://") or url.startswith("https://")
 
 
 class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for AI Memory."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self):
         """Initialize config flow."""
@@ -51,15 +57,8 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input.get("embedding_engine") == ENGINE_REMOTE:
                 return await self.async_step_remote_config()
 
-            if not errors:
-                return self.async_create_entry(
-                    title="AI Memory",
-                    data={
-                        "max_entries": user_input.get("max_entries", self._default_max_entries),
-                        "embedding_engine": user_input.get("embedding_engine", ENGINE_TFIDF),
-                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                )
+            # TF-IDF: go to palace config
+            return await self.async_step_palace_config()
 
         schema = vol.Schema({
             vol.Optional(
@@ -85,8 +84,12 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            self._user_input[CONF_REMOTE_URL] = user_input[CONF_REMOTE_URL]
-            return await self.async_step_model_selection()
+            remote_url = user_input[CONF_REMOTE_URL]
+            if not _validate_url(remote_url):
+                errors["base"] = "invalid_url"
+            else:
+                self._user_input[CONF_REMOTE_URL] = remote_url
+                return await self.async_step_model_selection()
 
         schema = vol.Schema({
             vol.Required(
@@ -111,25 +114,19 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             model_name = user_input[CONF_MODEL_NAME]
 
-            # Trigger model download
+            # Trigger model download with timeout
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                             f"{remote_url}/api/pull",
-                            json={"name": model_name}
+                            json={"name": model_name},
+                            timeout=aiohttp.ClientTimeout(total=300),
                     ) as response:
                         if response.status != 200:
                             errors["base"] = "pull_failed"
                         else:
-                            # Success
-                            data = {
-                                "max_entries": self._user_input.get("max_entries", self._default_max_entries),
-                                "embedding_engine": self._user_input.get("embedding_engine"),
-                                "remote_url": remote_url,
-                                "model_name": model_name,
-                                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            }
-                            return self.async_create_entry(title="AI Memory", data=data)
+                            self._user_input[CONF_MODEL_NAME] = model_name
+                            return await self.async_step_palace_config()
             except Exception:
                 errors["base"] = "cannot_connect"
 
@@ -137,7 +134,10 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         models = [DEFAULT_MODEL]
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{remote_url}/api/tags", timeout=5) as response:
+                async with session.get(
+                    f"{remote_url}/api/tags",
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         models = [m["name"] for m in data.get("models", [])]
@@ -157,6 +157,40 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors
         )
 
+    async def async_step_palace_config(
+            self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle palace configuration step."""
+        if user_input is not None:
+            data = {
+                "max_entries": self._user_input.get("max_entries", self._default_max_entries),
+                "embedding_engine": self._user_input.get("embedding_engine", ENGINE_TFIDF),
+                "identity_text": user_input.get(CONF_IDENTITY_TEXT, ""),
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+            # Add remote config if present
+            if CONF_REMOTE_URL in self._user_input:
+                data["remote_url"] = self._user_input[CONF_REMOTE_URL]
+                data["model_name"] = self._user_input.get(CONF_MODEL_NAME, DEFAULT_MODEL)
+
+            return self.async_create_entry(title="AI Memory", data=data)
+
+        schema = vol.Schema({
+            vol.Optional(
+                CONF_IDENTITY_TEXT,
+                default="",
+            ): str,
+        })
+
+        return self.async_show_form(
+            step_id="palace_config",
+            data_schema=schema,
+            description_placeholders={
+                "wing_info": "Household (devices, maintenance, events), Personal (preferences, health, secrets), Automation (routines, schedules), General"
+            },
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -171,7 +205,6 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry):
         """Initialize options flow."""
-        self.config_entry = config_entry
         self._user_input = {}
 
     async def async_step_init(
@@ -186,9 +219,11 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_remote_config()
 
             # Update the entry
+            data = dict(self.config_entry.data)
+            data.update(user_input)
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
-                data=user_input
+                data=data,
             )
 
             # Reload to apply changes
@@ -206,6 +241,10 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
                     "embedding_engine",
                     default=self.config_entry.data.get("embedding_engine", ENGINE_REMOTE)
                 ): vol.In(ENGINE_NAMES),
+                vol.Optional(
+                    CONF_IDENTITY_TEXT,
+                    default=self.config_entry.data.get("identity_text", ""),
+                ): str,
             }),
             errors=errors
         )
@@ -217,8 +256,12 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
-            self._user_input[CONF_REMOTE_URL] = user_input[CONF_REMOTE_URL]
-            return await self.async_step_model_selection()
+            remote_url = user_input[CONF_REMOTE_URL]
+            if not _validate_url(remote_url):
+                errors["base"] = "invalid_url"
+            else:
+                self._user_input[CONF_REMOTE_URL] = remote_url
+                return await self.async_step_model_selection()
 
         schema = vol.Schema({
             vol.Required(
@@ -243,27 +286,29 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             model_name = user_input[CONF_MODEL_NAME]
 
-            # Trigger model download
+            # Trigger model download with timeout
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                             f"{remote_url}/api/pull",
-                            json={"name": model_name}
+                            json={"name": model_name},
+                            timeout=aiohttp.ClientTimeout(total=300),
                     ) as response:
                         if response.status != 200:
                             errors["base"] = "pull_failed"
                         else:
-                            # Success
-                            data = {
+                            data = dict(self.config_entry.data)
+                            data.update({
                                 "max_entries": self._user_input.get("max_entries"),
                                 "embedding_engine": self._user_input.get("embedding_engine"),
                                 "remote_url": remote_url,
                                 "model_name": model_name,
-                            }
+                                "identity_text": self._user_input.get("identity_text", ""),
+                            })
 
                             self.hass.config_entries.async_update_entry(
                                 self.config_entry,
-                                data=data
+                                data=data,
                             )
                             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                             return self.async_create_entry(title="", data={})
@@ -276,14 +321,16 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{remote_url}/api/tags", timeout=5) as response:
+                async with session.get(
+                    f"{remote_url}/api/tags",
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         models = [m["name"] for m in data.get("models", [])]
         except Exception:
             errors["base"] = "cannot_connect"
 
-        # Ensure current model is in the list if possible, or default to it
         default_model = current_model if current_model in models else (models[0] if models else DEFAULT_MODEL)
 
         schema = vol.Schema({

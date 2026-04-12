@@ -14,18 +14,18 @@ _LOGGER = logging.getLogger(__name__)
 
 class TFIDFEmbeddingEngine:
     """Lightweight embedding engine using TF-IDF (no external dependencies).
-    
+
     This engine provides semantic search capabilities without requiring
     sentence-transformers or any ML libraries. Perfect for resource-constrained
     devices like Raspberry Pi 4.
-    
+
     Generates 384-dimensional vectors (same dimension as all-MiniLM-L6-v2)
     using TF-IDF weighting scheme with vocabulary hashing.
     """
 
     def __init__(self, hass: HomeAssistant, vector_dim: int = 384):
         """Initialize the TF-IDF embedding engine.
-        
+
         Args:
             hass: Home Assistant instance
             vector_dim: Dimension of output vectors (default: 384)
@@ -70,86 +70,43 @@ class TFIDFEmbeddingEngine:
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:
-        """Tokenize text into terms.
-        
-        Args:
-            text: Input text
-            
-        Returns:
-            List of lowercase tokens
-        """
-        # Convert to lowercase and split on non-alphanumeric
+        """Tokenize text into terms."""
         text = text.lower()
-        # Keep alphanumeric and basic punctuation
         tokens = re.findall(r'\b\w+\b', text)
         return tokens
 
     def _calculate_tf(self, tokens: List[str]) -> Dict[str, float]:
-        """Calculate term frequency.
-        
-        Args:
-            tokens: List of tokens
-            
-        Returns:
-            Dictionary mapping terms to their TF scores
-        """
+        """Calculate term frequency."""
         if not tokens:
             return {}
 
         term_counts = Counter(tokens)
         max_count = max(term_counts.values())
 
-        # Normalized TF: term_count / max_count_in_doc
         tf = {term: count / max_count for term, count in term_counts.items()}
         return tf
 
     def _calculate_idf(self, term: str) -> float:
-        """Calculate inverse document frequency for a term.
-        
-        Args:
-            term: The term to calculate IDF for
-            
-        Returns:
-            IDF score
-        """
+        """Calculate inverse document frequency for a term."""
         if self._document_count == 0:
             return 1.0
 
-        # IDF = log(N / df(t))
-        # Add smoothing: log((N + 1) / (df(t) + 1))
         df = self._term_document_freq.get(term, 0)
         idf = math.log((self._document_count + 1) / (df + 1))
         return idf
 
     def _hash_term_to_index(self, term: str) -> int:
-        """Hash a term to a vector index.
-        
-        Args:
-            term: Term to hash
-            
-        Returns:
-            Index in range [0, vector_dim)
-        """
-        # Simple hash function that maps terms to indices
+        """Hash a term to a vector index."""
         return hash(term) % self.vector_dim
 
     def _create_vector(self, tf_idf: Dict[str, float]) -> List[float]:
-        """Create a fixed-dimension vector from TF-IDF scores.
-        
-        Args:
-            tf_idf: Dictionary of term -> TF-IDF score
-            
-        Returns:
-            Fixed-dimension vector
-        """
+        """Create a fixed-dimension vector from TF-IDF scores."""
         vector = [0.0] * self.vector_dim
 
-        # Map each term to an index and accumulate scores
         for term, score in tf_idf.items():
             idx = self._hash_term_to_index(term)
             vector[idx] += score
 
-        # Normalize vector to unit length (L2 normalization)
         magnitude = math.sqrt(sum(x * x for x in vector))
         if magnitude > 0:
             vector = [x / magnitude for x in vector]
@@ -157,71 +114,42 @@ class TFIDFEmbeddingEngine:
         return vector
 
     def update_vocabulary(self, text: str):
-        """Update vocabulary with a new document (for IDF calculation).
-        
-        This should be called when adding new memories to improve
-        future embedding quality.
-        
-        Args:
-            text: Document text
-        """
+        """Update vocabulary with a new document (for IDF calculation)."""
         tokens = self._tokenize(text)
         if not tokens:
             return
 
-        # Update document count
         self._document_count += 1
 
-        # Update document frequency for each unique term
         unique_terms = set(tokens)
         for term in unique_terms:
             self._term_document_freq[term] += 1
 
-        # Save vocabulary periodically (every 10 documents)
         if self._document_count % 10 == 0:
             self._save_vocabulary()
 
     def generate_embedding(self, text: str) -> List[float]:
-        """Generate TF-IDF embedding synchronously.
-        
-        Args:
-            text: Input text
-            
-        Returns:
-            384-dimensional embedding vector
-        """
-        # Tokenize
+        """Generate TF-IDF embedding synchronously."""
         tokens = self._tokenize(text)
         if not tokens:
             return [0.0] * self.vector_dim
 
-        # Calculate TF
         tf = self._calculate_tf(tokens)
 
-        # Calculate TF-IDF
         tf_idf = {}
         for term, tf_score in tf.items():
             idf_score = self._calculate_idf(term)
             tf_idf[term] = tf_score * idf_score
 
-        # Create fixed-dimension vector
         vector = self._create_vector(tf_idf)
 
         return vector
 
     async def async_generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text asynchronously.
-        
-        Args:
-            text: Input text
-            
-        Returns:
-            384-dimensional embedding vector
-        """
+        """Generate embedding for text asynchronously."""
         if not text:
             return [0.0] * self.vector_dim
 
-        # Run in executor to avoid blocking the event loop
         return await self.hass.async_add_executor_job(
             self.generate_embedding,
             text

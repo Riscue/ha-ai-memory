@@ -16,6 +16,10 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     mock_manager._max_entries = 100
     mock_manager._embedding_engine.engine_name = "test_engine"
     mock_manager.async_get_memory_counts = AsyncMock(return_value={"total": 10})
+    mock_manager.async_get_layer_counts = AsyncMock(return_value={"L1": 2, "L2": 8})
+    mock_manager.async_get_wing_counts = AsyncMock(return_value={"household": 5, "personal": 5})
+    mock_manager._palace = MagicMock()
+    mock_manager._palace.get_stats.return_value = {"wings": 3, "rooms": 8}
 
     hass.data[DOMAIN] = {"manager": mock_manager}
 
@@ -32,7 +36,13 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     # Test update
     await sensor.async_update()
     assert sensor.extra_state_attributes["memory_counts"] == {"total": 10}
+    assert sensor.extra_state_attributes["layer_distribution"] == {"L1": 2, "L2": 8}
+    assert sensor.extra_state_attributes["wing_distribution"] == {"household": 5, "personal": 5}
+    assert sensor.extra_state_attributes["palace_structure"] == {"wings": 3, "rooms": 8}
     assert sensor.extra_state_attributes["max_entries"] == 500
+
+    # Verify scan interval can be set
+    assert sensor._scan_interval.total_seconds() == 900  # 15 min default
 
 
 async def test_sensor_update_event(hass: HomeAssistant, mock_config_entry):

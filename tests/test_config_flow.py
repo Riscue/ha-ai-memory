@@ -20,6 +20,7 @@ async def test_form(hass: HomeAssistant) -> None:
             "custom_components.ai_memory.async_setup_entry",
             return_value=True,
     ) as mock_setup_entry:
+        # Step 1: user (TF-IDF)
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {
@@ -27,12 +28,24 @@ async def test_form(hass: HomeAssistant) -> None:
                 "embedding_engine": "tfidf",
             },
         )
+        # Should go to palace_config step
+        assert result2["type"] == FlowResultType.FORM
+        assert result2["step_id"] == "palace_config"
+
+        # Step 2: palace_config
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {
+                "identity_text": "Test identity",
+            },
+        )
         await hass.async_block_till_done()
 
-    assert result2["type"] == FlowResultType.CREATE_ENTRY
-    assert result2["title"] == "AI Memory"
-    assert result2["data"]["max_entries"] == 500
-    assert result2["data"]["embedding_engine"] == "tfidf"
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert result3["title"] == "AI Memory"
+    assert result3["data"]["max_entries"] == 500
+    assert result3["data"]["embedding_engine"] == "tfidf"
+    assert result3["data"]["identity_text"] == "Test identity"
     assert len(mock_setup_entry.mock_calls) == 1
 
 
@@ -121,14 +134,25 @@ async def test_form_remote(hass: HomeAssistant) -> None:
                 "model_name": "llama2",
             },
         )
+        # Should now go to palace_config
+        assert result4["type"] == FlowResultType.FORM
+        assert result4["step_id"] == "palace_config"
+
+        # Palace config
+        result5 = await hass.config_entries.flow.async_configure(
+            result4["flow_id"],
+            {
+                "identity_text": "",
+            },
+        )
         await hass.async_block_till_done()
 
-    assert result4["type"] == FlowResultType.CREATE_ENTRY
-    assert result4["title"] == "AI Memory"
-    assert result4["data"]["max_entries"] == 500
-    assert result4["data"]["embedding_engine"] == "remote"
-    assert result4["data"]["remote_url"] == "http://localhost:11434"
-    assert result4["data"]["model_name"] == "llama2"
+    assert result5["type"] == FlowResultType.CREATE_ENTRY
+    assert result5["title"] == "AI Memory"
+    assert result5["data"]["max_entries"] == 500
+    assert result5["data"]["embedding_engine"] == "remote"
+    assert result5["data"]["remote_url"] == "http://localhost:11434"
+    assert result5["data"]["model_name"] == "llama2"
     assert len(mock_setup_entry.mock_calls) == 1
 
 

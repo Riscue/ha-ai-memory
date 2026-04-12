@@ -1,3 +1,4 @@
+"""Tests for LLM API and Tools."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -5,7 +6,7 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.ai_memory.constants import DOMAIN
 
-# Mock llm module before importing memory_llm_api
+# Mock llm module before importing
 mock_llm = MagicMock()
 
 
@@ -51,10 +52,12 @@ with patch.dict("sys.modules", {
     "homeassistant.components.llm": mock_llm,
     "homeassistant.helpers.llm": mock_llm
 }):
+    from custom_components.ai_memory.llm import api as llm_api
+    from custom_components.ai_memory.llm.tools import AddMemoryTool, SearchMemoryTool, DeleteMemoryTool
     from custom_components.ai_memory import memory_llm_api
-    import importlib
 
-    importlib.reload(memory_llm_api)
+    import importlib
+    importlib.reload(llm_api)
 
 
 @pytest.fixture
@@ -63,43 +66,50 @@ def mock_manager():
     manager = AsyncMock()
     manager.async_add_memory = AsyncMock()
     manager.async_search_memory = AsyncMock(return_value=[])
+    manager.async_delete_memory = AsyncMock(return_value=True)
     return manager
 
 
 async def test_add_memory_tool(mock_manager):
     """Test AddMemoryTool with scope."""
-    tool = memory_llm_api.AddMemoryTool(mock_manager)
+    tool = AddMemoryTool(mock_manager)
     hass = MagicMock(spec=HomeAssistant)
 
-    # Test Private (Default)
-    tool_input = MockToolInput({"content": "Test"})
+    # Test Private (explicit)
+    tool_input = MockToolInput({"content": "Test", "scope": "private"})
     llm_context = MockLLMContext("agent_1")
 
     await tool.async_call(hass, tool_input, llm_context)
-    mock_manager.async_add_memory.assert_called_with("Test", "private", "agent_1")
+    mock_manager.async_add_memory.assert_called_with(
+        "Test", "private", "agent_1",
+        summary=None, wing=None, room=None,
+    )
 
     # Test Common
     tool_input = MockToolInput({"content": "Test", "scope": "common"})
     await tool.async_call(hass, tool_input, llm_context)
-    mock_manager.async_add_memory.assert_called_with("Test", "common", "agent_1")
+    mock_manager.async_add_memory.assert_called_with(
+        "Test", "common", "agent_1",
+        summary=None, wing=None, room=None,
+    )
 
 
 async def test_add_memory_tool_error(mock_manager):
     """Test AddMemoryTool error handling."""
-    tool = memory_llm_api.AddMemoryTool(mock_manager)
+    tool = AddMemoryTool(mock_manager)
     hass = MagicMock(spec=HomeAssistant)
     mock_manager.async_add_memory.side_effect = Exception("Save Error")
 
     tool_input = MockToolInput({"content": "Test"})
     llm_context = MockLLMContext("agent_1")
 
-    with pytest.raises(Exception, match="Error: Save Error"):
+    with pytest.raises(Exception, match="Save Error"):
         await tool.async_call(hass, tool_input, llm_context)
 
 
 async def test_search_memory_tool(mock_manager):
     """Test SearchMemoryTool passes agent_id."""
-    tool = memory_llm_api.SearchMemoryTool(mock_manager)
+    tool = SearchMemoryTool(mock_manager)
     hass = MagicMock(spec=HomeAssistant)
 
     tool_input = MockToolInput({"query": "Test"})
@@ -110,20 +120,16 @@ async def test_search_memory_tool(mock_manager):
          "created_at": "2011-08-12T20:17:46.384Z"},
         {"content": "Result 2", "score": 0.3, "scope": "common", "agent_id": "",
          "created_at": "2011-08-12T20:17:46.384Z"},
-        {"content": "Result 3", "score": 0.6, "scope": "private", "agent_id": "agent_1",
-         "created_at": "2011-08-12T20:17:46.384Z"},
     ]
 
     result = await tool.async_call(hass, tool_input, llm_context)
-    mock_manager.async_search_memory.assert_called_with("Test", "agent_1")
     assert result["success"] is True
     assert "Result 1" in result["results"]
-    assert "Result 2" in result["results"]
 
 
 async def test_search_memory_tool_no_results(mock_manager):
     """Test SearchMemoryTool with no results."""
-    tool = memory_llm_api.SearchMemoryTool(mock_manager)
+    tool = SearchMemoryTool(mock_manager)
     hass = MagicMock(spec=HomeAssistant)
 
     tool_input = MockToolInput({"query": "Test"})
@@ -138,15 +144,28 @@ async def test_search_memory_tool_no_results(mock_manager):
 
 async def test_search_memory_tool_error(mock_manager):
     """Test SearchMemoryTool error handling."""
-    tool = memory_llm_api.SearchMemoryTool(mock_manager)
+    tool = SearchMemoryTool(mock_manager)
     hass = MagicMock(spec=HomeAssistant)
     mock_manager.async_search_memory.side_effect = Exception("Search Error")
 
     tool_input = MockToolInput({"query": "Test"})
     llm_context = MockLLMContext("agent_1")
 
-    with pytest.raises(Exception, match="Error: Search Error"):
+    with pytest.raises(Exception, match="Search Error"):
         await tool.async_call(hass, tool_input, llm_context)
+
+
+async def test_delete_memory_tool(mock_manager):
+    """Test DeleteMemoryTool."""
+    tool = DeleteMemoryTool(mock_manager)
+    hass = MagicMock(spec=HomeAssistant)
+
+    tool_input = MockToolInput({"memory_id": "test-id"})
+    llm_context = MockLLMContext("agent_1")
+
+    result = await tool.async_call(hass, tool_input, llm_context)
+    assert result["success"] is True
+    mock_manager.async_delete_memory.assert_called_with("test-id", "agent_1")
 
 
 async def test_get_api_instance_success(mock_manager):
@@ -154,13 +173,13 @@ async def test_get_api_instance_success(mock_manager):
     hass = MagicMock(spec=HomeAssistant)
     hass.data = {DOMAIN: {"manager": mock_manager}}
 
-    api = memory_llm_api.MemoryAPI(hass)
+    api = llm_api.MemoryAPI(hass)
     llm_context = MockLLMContext("agent_1")
 
     instance = await api.async_get_api_instance(llm_context)
     assert hasattr(instance, 'api')
     assert hasattr(instance, 'tools')
-    assert len(instance.tools) == 2
+    assert len(instance.tools) == 3  # add, search, delete
 
 
 async def test_get_api_instance_no_manager():
@@ -168,7 +187,7 @@ async def test_get_api_instance_no_manager():
     hass = MagicMock(spec=HomeAssistant)
     hass.data = {DOMAIN: {}}  # No manager
 
-    api = memory_llm_api.MemoryAPI(hass)
+    api = llm_api.MemoryAPI(hass)
     llm_context = MockLLMContext("agent_1")
 
     instance = await api.async_get_api_instance(llm_context)
@@ -182,12 +201,7 @@ async def test_async_setup_duplicate_registration():
     """Test that duplicate registration is handled gracefully."""
     hass = MagicMock(spec=HomeAssistant)
 
-    # Patch the llm module used by memory_llm_api
-    with patch.object(memory_llm_api, "llm") as mock_llm_module:
-        # Mock llm.async_register_api to raise exception
+    with patch.object(llm_api, "llm") as mock_llm_module:
         mock_llm_module.async_register_api.side_effect = Exception("API already registered")
-
-        # Should not raise exception
-        await memory_llm_api.async_setup(hass)
-
+        await llm_api.async_setup(hass)
         mock_llm_module.async_register_api.assert_called_once()

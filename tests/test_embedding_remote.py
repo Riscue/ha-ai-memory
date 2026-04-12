@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch, AsyncMock
 
 import pytest
 
-from custom_components.ai_memory.embedding_remote import RemoteEmbeddingEngine
+from custom_components.ai_memory.embedding.remote import RemoteEmbeddingEngine
 
 
 class TestRemoteEmbeddingEngine:
@@ -33,19 +33,22 @@ class TestRemoteEmbeddingEngine:
         """Test successful sync embedding generation."""
         engine = RemoteEmbeddingEngine(mock_hass, config_data)
 
+        # Generate a 384-dimensional embedding to match EMBEDDINGS_VECTOR_DIM
+        fake_embedding = [0.1] * 384
+
         with patch("requests.post") as mock_post:
             mock_response = Mock()
             mock_response.status_code = 200
-            mock_response.json.return_value = {"embeddings": [[0.1, 0.2, 0.3]]}
+            mock_response.json.return_value = {"embeddings": [fake_embedding]}
             mock_post.return_value = mock_response
 
             embedding = engine.generate_embedding("test")
 
-            assert embedding == [0.1, 0.2, 0.3]
+            assert embedding == fake_embedding
             mock_post.assert_called_with(
                 "http://test-server:8000/api/embed",
                 json={"model": "test-model", "input": ["test"]},
-                timeout=10
+                timeout=30,
             )
 
     @pytest.mark.asyncio
@@ -87,19 +90,21 @@ class TestRemoteEmbeddingEngine:
         """Test successful sync embedding generation."""
         engine = RemoteEmbeddingEngine(mock_hass, config_data)
 
+        fake_embedding = [0.1] * 384
+
         with patch("requests.post") as mock_post:
             mock_response = Mock()
             mock_response.status_code = 200
-            mock_response.json.return_value = {"embeddings": [[0.1, 0.2, 0.3]]}
+            mock_response.json.return_value = {"embeddings": [fake_embedding]}
             mock_post.return_value = mock_response
 
             embedding = engine.generate_embedding("test")
 
-            assert embedding == [0.1, 0.2, 0.3]
+            assert embedding == fake_embedding
             mock_post.assert_called_with(
                 "http://test-server:8000/api/embed",
                 json={"model": "test-model", "input": ["test"]},
-                timeout=10
+                timeout=30,
             )
 
     @pytest.mark.asyncio

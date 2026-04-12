@@ -8,11 +8,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .constants import DOMAIN
-from .memory_manager import MemoryManager
+from .memory.manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=15)
+DEFAULT_SCAN_INTERVAL = timedelta(minutes=15)
 
 
 async def async_setup_entry(
@@ -25,7 +25,10 @@ async def async_setup_entry(
         _LOGGER.error("Memory manager not found")
         return
 
-    sensor = AIMemorySensor(hass, entry, manager)
+    scan_interval = timedelta(
+        minutes=entry.data.get("scan_interval", 15)
+    )
+    sensor = AIMemorySensor(hass, entry, manager, scan_interval)
     async_add_entities([sensor], True)
     _LOGGER.debug("Created AI Memory sensor")
 
@@ -35,7 +38,8 @@ class AIMemorySensor(SensorEntity):
             self,
             hass: HomeAssistant,
             entry: ConfigEntry,
-            memory_manager: MemoryManager
+            memory_manager: MemoryManager,
+            scan_interval: timedelta = DEFAULT_SCAN_INTERVAL,
     ):
         self.hass = hass
         self.entry = entry
@@ -44,7 +48,11 @@ class AIMemorySensor(SensorEntity):
         self._attr_unique_id = "ai_memory_store"
         self._attr_icon = "mdi:brain"
         self._attr_entity_registry_enabled_default = True
+        self._scan_interval = scan_interval
         self._memory_counts = {}
+        self._layer_counts = {}
+        self._wing_counts = {}
+        self._palace_stats = {}
 
     @property
     def state(self):
@@ -57,6 +65,9 @@ class AIMemorySensor(SensorEntity):
             "max_entries": self.memory_manager._max_entries,
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "memory_counts": self._memory_counts,
+            "layer_distribution": self._layer_counts,
+            "wing_distribution": self._wing_counts,
+            "palace_structure": self._palace_stats,
         }
 
         # Add config data
@@ -68,6 +79,14 @@ class AIMemorySensor(SensorEntity):
     async def async_update(self):
         """Update sensor state."""
         self._memory_counts = await self.memory_manager.async_get_memory_counts()
+        self._layer_counts = await self.memory_manager.async_get_layer_counts()
+        self._wing_counts = await self.memory_manager.async_get_wing_counts()
+
+        # Get palace stats
+        try:
+            self._palace_stats = self.memory_manager._palace.get_stats()
+        except Exception:
+            self._palace_stats = {"wings": 0, "rooms": 0}
 
     async def async_added_to_hass(self):
         self.async_on_remove(

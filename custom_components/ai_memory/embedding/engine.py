@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from homeassistant.core import HomeAssistant
 
-from .constants import (
+from ..constants import (
     ENGINE_REMOTE,
     ENGINE_TFIDF,
     EMBEDDINGS_VECTOR_DIM,
@@ -12,10 +12,12 @@ from .constants import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_EMBEDDING_CACHE_MAX = 100
+
 
 class EmbeddingEngine:
     """Engine to generate vector embeddings from text with multiple backends.
-    
+
     Supports multiple embedding engines with automatic fallback:
     1. Remote Service (Recommended)
     2. TF-IDF (Lightweight, No Dependencies)
@@ -23,7 +25,7 @@ class EmbeddingEngine:
 
     def __init__(self, hass: HomeAssistant, engine_type: str = ENGINE_TFIDF, config_data: dict = None):
         """Initialize the embedding engine.
-        
+
         Args:
             hass: Home Assistant instance
             engine_type: Engine type to use (remote, tfidf)
@@ -35,16 +37,17 @@ class EmbeddingEngine:
         self._engine = None
         self._engine_name = None
         self._initialized = False
+        self._cache: dict = {}  # text -> embedding (LRU, max 100)
 
     def _create_engine(self, engine_type: str):
         """Create specific engine instance."""
         try:
             if engine_type == ENGINE_TFIDF:
-                from .embedding_tfidf import TFIDFEmbeddingEngine
+                from .tfidf import TFIDFEmbeddingEngine
                 return TFIDFEmbeddingEngine(self.hass, EMBEDDINGS_VECTOR_DIM)
 
             elif engine_type == ENGINE_REMOTE:
-                from .embedding_remote import RemoteEmbeddingEngine
+                from .remote import RemoteEmbeddingEngine
                 return RemoteEmbeddingEngine(self.hass, self._config_data)
 
         except ImportError as e:
@@ -65,8 +68,6 @@ class EmbeddingEngine:
             return False
 
         try:
-            # Test generation (lightweight check)
-            # For some engines this triggers model load
             if hasattr(engine, '_load_model'):
                 engine._load_model()
 
@@ -98,7 +99,6 @@ class EmbeddingEngine:
             )
 
             # 2. Strict Fallback to TF-IDF
-            # Only if the requested engine was NOT TF-IDF (to avoid infinite loop or redundant check)
             if self._engine_type != ENGINE_TFIDF:
                 if self._try_initialize_engine(ENGINE_TFIDF):
                     success = True
@@ -111,19 +111,32 @@ class EmbeddingEngine:
         self._initialized = True
 
     def _generate_embedding_sync(self, text: str) -> List[float]:
-        """Generate embedding synchronously."""
+        """Generate embedding synchronously with LRU cache."""
         if not self._initialized:
             self._initialize_engine()
 
         if not self._engine:
             raise RuntimeError("Embedding engine not initialized")
 
-        return self._engine.generate_embedding(text)
+        # Check cache
+        cache_key = text[:200]  # Truncate key to avoid excessive memory
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        embedding = self._engine.generate_embedding(text)
+
+        # Store in cache (evict oldest if full)
+        if len(self._cache) >= _EMBEDDING_CACHE_MAX:
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
+        self._cache[cache_key] = embedding
+
+        return embedding
 
     async def async_generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text asynchronously."""
         if not text:
-            return [0.0] * EMBEDDINGS_VECTOR_DIM
+            return []
 
         return await self.hass.async_add_executor_job(
             self._generate_embedding_sync,

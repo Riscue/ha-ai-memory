@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from custom_components.ai_memory.embedding_tfidf import TFIDFEmbeddingEngine
+from custom_components.ai_memory.embedding.tfidf import TFIDFEmbeddingEngine
 
 
 @pytest.fixture

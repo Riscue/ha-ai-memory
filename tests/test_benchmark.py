@@ -4,7 +4,7 @@ import pytest
 
 from custom_components.ai_memory.constants import ENGINE_REMOTE, MEMORY_LIMIT, \
     SIMILARITY_THRESHOLD, DEFAULT_REMOTE_URL
-from custom_components.ai_memory.embedding_remote import RemoteEmbeddingEngine
+from custom_components.ai_memory.embedding.remote import RemoteEmbeddingEngine
 from custom_components.ai_memory.memory_manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)

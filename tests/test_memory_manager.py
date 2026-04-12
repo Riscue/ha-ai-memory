@@ -3,144 +3,110 @@ import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch, AsyncMock
 
+import numpy as np
 import pytest
 from homeassistant.core import HomeAssistant
 
-from custom_components.ai_memory.memory_manager import MemoryManager
+from custom_components.ai_memory.memory.manager import MemoryManager
+from custom_components.ai_memory.memory.store import MemoryStore
+from custom_components.ai_memory.memory.search import MemorySearch
 
 
 @pytest.fixture
 def mock_hass():
     """Mock Home Assistant."""
     hass = MagicMock(spec=HomeAssistant)
-    hass.async_add_executor_job = AsyncMock()
-
     # Mock executor to run function immediately
     async def mock_async_add_executor_job(target, *args):
         return target(*args)
 
-    hass.async_add_executor_job.side_effect = mock_async_add_executor_job
+    hass.async_add_executor_job = AsyncMock(side_effect=mock_async_add_executor_job)
     hass.bus = MagicMock()
+    hass.config = MagicMock()
+    hass.config.path.return_value = "/tmp/test_ha_config"
     return hass
 
 
 @pytest.fixture
 def mock_embedding_engine():
     """Mock EmbeddingEngine."""
-    with patch("custom_components.ai_memory.embedding.EmbeddingEngine") as mock_cls:
+    with patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine") as mock_cls:
         instance = mock_cls.return_value
-        instance.async_generate_embedding = AsyncMock(return_value=[1.0, 0.0, 0.0])
+        instance.async_generate_embedding = AsyncMock(return_value=[1.0] + [0.0] * 383)
+        instance._generate_embedding_sync = MagicMock(return_value=[1.0] + [0.0] * 383)
+        instance.engine_name = "mock"
         yield instance
 
 
 @pytest.fixture
-def mock_db():
-    """Mock SQLite connection."""
-    with patch("sqlite3.connect") as mock_connect:
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_connect.return_value.__enter__.return_value = mock_conn
-        mock_conn.cursor.return_value = mock_cursor
-        yield mock_cursor
-
-
-@pytest.fixture
 def memory_manager(mock_hass, mock_embedding_engine):
-    """Create MemoryManager instance."""
-    with patch("os.makedirs"), \
-            patch("sqlite3.connect"), \
-            patch("custom_components.ai_memory.memory_manager.EmbeddingEngine") as mock_engine_cls:
+    """Create MemoryManager instance with in-memory database."""
+    with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
         mock_engine_cls.return_value = mock_embedding_engine
-        manager = MemoryManager(mock_hass)
+        manager = MemoryManager(mock_hass, db_path=":memory:")
         return manager
 
 
-async def test_init_db(mock_hass, mock_embedding_engine):
-    """Test database initialization."""
-    with patch("sqlite3.connect") as mock_connect, \
-            patch("custom_components.ai_memory.memory_manager.EmbeddingEngine") as mock_engine_cls:
-        mock_engine_cls.return_value = mock_embedding_engine
-        mock_cursor = MagicMock()
-        mock_connect.return_value.__enter__.return_value.cursor.return_value = mock_cursor
-
-        MemoryManager(mock_hass)
-
-        # Verify table creation
-        mock_cursor.execute.assert_called()
-        assert "CREATE TABLE IF NOT EXISTS memories" in mock_cursor.execute.call_args[0][0]
+async def test_init_creates_tables(memory_manager):
+    """Test database initialization creates tables."""
+    # Verify memories table exists with new columns
+    rows = memory_manager._store.execute_query("PRAGMA table_info(memories)")
+    column_names = [row[1] for row in rows]
+    assert "summary" in column_names
+    assert "wing" in column_names
+    assert "room" in column_names
+    assert "layer" in column_names
+    assert "access_count" in column_names
 
 
-async def test_add_memory_sql(memory_manager, mock_db):
-    """Test adding memory executes INSERT."""
-    # Mock count query
-    mock_db.fetchall.return_value = [[0]]
+async def test_add_memory_basic(memory_manager):
+    """Test adding a memory entry."""
+    await memory_manager.async_add_memory("Test content", "private", "agent_1")
 
-    await memory_manager.async_add_memory("Test", "private", "agent_1")
-
-    # Verify INSERT
-    insert_call = [c for c in mock_db.execute.call_args_list if "INSERT INTO" in c[0][0]]
-    assert len(insert_call) == 1
-    args = insert_call[0][0][1]
-    assert args[1] == "Test"  # content
-    assert args[3] == "private"  # scope
-    assert args[4] == "agent_1"  # agent_id
-
-
-async def test_async_get_memory_counts(mock_hass, memory_manager, mock_db):
-    """Test getting memory counts."""
-    # Mock return for SELECT scope, COUNT(*)
-    mock_db.fetchall.return_value = [
-        ("common", 1),
-        ("private", 1)
-    ]
-
-    counts = await memory_manager.async_get_memory_counts()
-    assert counts["common"] == 1
-    assert counts["private"] == 1
-    assert counts["total"] == 2
+    rows = memory_manager._store.execute_query("SELECT content, scope, agent_id, wing, room, layer FROM memories")
+    assert len(rows) == 1
+    assert rows[0][0] == "Test content"
+    assert rows[0][1] == "private"
+    assert rows[0][2] == "agent_1"
+    # wing/room auto-detected by RoomDetector
+    assert rows[0][3] is not None
+    assert rows[0][4] is not None
+    assert rows[0][5] == 2  # default layer
 
 
-async def test_async_search_memory(memory_manager, mock_db):
-    """Test search executes SELECT and filters."""
-    # Mock SELECT return
-    mock_db.fetchall.return_value = [
-        ("Content A", json.dumps([1.0, 0.0, 0.0]), "private", "agent_1", datetime.now()),
-        ("Content B", json.dumps([-1.0, 0.0, 0.0]), "common", "agent_1", datetime.now())
-    ]
+async def test_add_memory_with_wing_room(memory_manager):
+    """Test adding memory with explicit wing/room."""
+    await memory_manager.async_add_memory(
+        "Test", "common", "agent_1",
+        wing="household", room="devices"
+    )
 
-    results = await memory_manager.async_search_memory("query", "agent_1")
-
-    # Verify SELECT
-    select_call = [c for c in mock_db.execute.call_args_list if "SELECT" in c[0][0]]
-    assert len(select_call) == 1
-    assert "scope = 'common'" in select_call[0][0][0]
-
-    # Verify filtering (Content A should match [1,0,0], Content B should not [-1,0,0])
-    assert len(results) == 1
-    assert results[0]["content"] == "Content A"
+    rows = memory_manager._store.execute_query("SELECT wing, room FROM memories")
+    assert rows[0][0] == "household"
+    assert rows[0][1] == "devices"
 
 
-async def test_init_db_failure(mock_hass):
-    """Test database initialization failure."""
-    with patch("sqlite3.connect", side_effect=Exception("DB Error")):
-        MemoryManager(mock_hass)
-        # Should log error but not crash
+async def test_add_memory_with_summary(memory_manager, mock_embedding_engine):
+    """Test adding memory with summary uses summary for embedding."""
+    await memory_manager.async_add_memory(
+        "Mutfaktaki ampul patladi",
+        "common",
+        summary="mutfak ampul patlak ariza"
+    )
+
+    # Verify embedding was generated (from summary)
+    mock_embedding_engine.async_generate_embedding.assert_called()
+    rows = memory_manager._store.execute_query("SELECT summary, content FROM memories")
+    assert rows[0][0] == "mutfak ampul patlak ariza"
+    assert rows[0][1] == "Mutfaktaki ampul patladi"
 
 
-async def test_execute_query_failure(memory_manager, mock_db):
-    """Test query execution failure."""
-    mock_db.execute.side_effect = Exception("Query Error")
-    results = await memory_manager.async_search_memory("query", "agent_1")
-    assert results == []
-
-
-async def test_add_memory_invalid_input(memory_manager, mock_db):
+async def test_add_memory_invalid_input(memory_manager):
     """Test adding memory with invalid input."""
     # Empty content
     await memory_manager.async_add_memory("", "private", "agent_1")
-    # Verify NO INSERT
-    insert_call = [c for c in mock_db.execute.call_args_list if "INSERT INTO" in c[0][0]]
-    assert len(insert_call) == 0
+    rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
+    assert rows[0][0] == 0
 
     # Invalid scope
     with pytest.raises(ValueError, match="Invalid scope"):
@@ -151,71 +117,125 @@ async def test_add_memory_invalid_input(memory_manager, mock_db):
         await memory_manager.async_add_memory("Test", "private", None)
 
 
-async def test_add_memory_embedding_failure(memory_manager, mock_embedding_engine, mock_db):
-    """Test adding memory when embedding generation fails."""
-    mock_embedding_engine.async_generate_embedding.side_effect = Exception("Embedding Error")
-    mock_db.fetchall.return_value = [[0]]  # Mock count
+async def test_async_get_memory_counts(memory_manager):
+    """Test getting memory counts."""
+    await memory_manager.async_add_memory("Common 1", "common")
+    await memory_manager.async_add_memory("Private 1", "private", "agent_1")
+    await memory_manager.async_add_memory("Private 2", "private", "agent_1")
 
-    await memory_manager.async_add_memory("Test", "common")
-
-    # Should still insert with empty embedding
-    insert_call = [c for c in mock_db.execute.call_args_list if "INSERT INTO" in c[0][0]]
-    assert len(insert_call) == 1
-    args = insert_call[0][0][1]
-    assert args[2] == "[]"  # Empty embedding json
+    counts = await memory_manager.async_get_memory_counts()
+    assert counts["common"] == 1
+    assert counts["private"] == 2
+    assert counts["total"] == 3
 
 
-async def test_search_memory_embedding_failure(memory_manager, mock_embedding_engine, mock_db):
+async def test_async_search_memory(memory_manager):
+    """Test search returns matching memories."""
+    await memory_manager.async_add_memory("Kitchen light is on", "common")
+    await memory_manager.async_add_memory("Garage door is closed", "common")
+
+    results = await memory_manager.async_search_memory("kitchen light", "agent_1")
+    assert len(results) >= 1
+    assert any("Kitchen" in r["content"] for r in results)
+
+
+async def test_async_search_memory_empty_query(memory_manager):
+    """Test search with empty query returns empty."""
+    results = await memory_manager.async_search_memory("", "agent_1")
+    assert results == []
+
+
+async def test_async_search_memory_embedding_failure(memory_manager, mock_embedding_engine):
     """Test search when query embedding generation fails."""
     mock_embedding_engine.async_generate_embedding.side_effect = Exception("Embedding Error")
+    await memory_manager.async_add_memory("Test", "common")
 
     results = await memory_manager.async_search_memory("query", "agent_1")
     assert results == []
 
 
-async def test_search_memory_malformed_db_data(memory_manager, mock_db):
-    """Test search with malformed JSON in DB."""
-    mock_db.fetchall.return_value = [
-        ("Content A", "invalid_json", "private", "agent_1", datetime.now()),
-        ("Content B", "[1.0, 0.0]", "common", "agent_1", datetime.now())  # Mismatched dimension (assuming query is 3D)
-    ]
+async def test_add_memory_embedding_failure(memory_manager, mock_embedding_engine):
+    """Test adding memory when embedding generation fails."""
+    mock_embedding_engine.async_generate_embedding.side_effect = Exception("Embedding Error")
 
-    results = await memory_manager.async_search_memory("query", "agent_1")
-    # Should skip invalid rows
-    assert len(results) == 0
+    await memory_manager.async_add_memory("Test", "common")
+
+    # Should still insert with NULL embedding
+    rows = memory_manager._store.execute_query("SELECT embedding FROM memories")
+    assert len(rows) == 1
+    assert rows[0][0] is None
 
 
-async def test_cosine_similarity_edge_cases(memory_manager):
+async def test_cosine_similarity_edge_cases():
     """Test cosine similarity edge cases."""
-    import numpy as np
+    search = MemorySearch.__new__(MemorySearch)
     # Zero vectors
-    assert memory_manager._cosine_similarity(np.array([0, 0]), np.array([0, 0])) == 0.0
+    assert search._cosine_similarity(np.array([0, 0]), np.array([0, 0])) == 0.0
     # Mismatched length
-    assert memory_manager._cosine_similarity(np.array([1]), np.array([1, 2])) == 0.0
+    assert search._cosine_similarity(np.array([1]), np.array([1, 2])) == 0.0
     # Empty
-    assert memory_manager._cosine_similarity(np.array([]), np.array([])) == 0.0
+    assert search._cosine_similarity(np.array([]), np.array([])) == 0.0
 
 
-async def test_ensure_directory_exists_failure(mock_hass):
-    """Test directory creation failure."""
-    with patch("os.makedirs", side_effect=Exception("Permission Denied")):
-        # We need to instantiate MemoryManager which calls _ensure_directory_exists in __init__
-        # We also need to mock other init calls to isolate the failure
-        with patch("custom_components.ai_memory.embedding.EmbeddingEngine"), \
-                patch("sqlite3.connect"):
-            manager = MemoryManager(mock_hass)
-            # It catches exception and logs error, so initialization should proceed (or at least not crash)
-            # But wait, _ensure_directory_exists returns False. The init doesn't check return value.
-            # So it just logs.
+async def test_async_delete_memory_own_private(memory_manager):
+    """Test agent can delete its own private memory."""
+    await memory_manager.async_add_memory("Secret", "private", "agent_1")
 
-    async def test_async_initialize_failure(memory_manager, mock_embedding_engine):
-        """Test initialization failure when remote is down."""
-        # Mock engine to have async_get_version returning False
-        mock_embedding_engine._engine = AsyncMock()
-        mock_embedding_engine._engine.async_get_version.return_value = False
+    rows = memory_manager._store.execute_query("SELECT id FROM memories")
+    memory_id = rows[0][0]
 
-        # We need to re-assign the engine to the manager's internal engine wrapper
-        memory_manager._embedding_engine = mock_embedding_engine
+    result = await memory_manager.async_delete_memory(memory_id, "agent_1")
+    assert result is True
+
+    rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
+    assert rows[0][0] == 0
+
+
+async def test_async_delete_memory_cannot_delete_other_private(memory_manager):
+    """Test agent cannot delete another agent's private memory."""
+    await memory_manager.async_add_memory("Secret", "private", "agent_1")
+
+    rows = memory_manager._store.execute_query("SELECT id FROM memories")
+    memory_id = rows[0][0]
+
+    result = await memory_manager.async_delete_memory(memory_id, "agent_2")
+    assert result is True  # SQL executes but doesn't match any rows
+
+    # Memory should still exist
+    rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
+    assert rows[0][0] == 1
+
+
+async def test_async_delete_memory_any_agent_can_delete_common(memory_manager):
+    """Test any agent can delete common memory."""
+    await memory_manager.async_add_memory("Shared fact", "common")
+
+    rows = memory_manager._store.execute_query("SELECT id FROM memories")
+    memory_id = rows[0][0]
+
+    result = await memory_manager.async_delete_memory(memory_id, "any_agent")
+    assert result is True
+
+    rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
+    assert rows[0][0] == 0
+
+
+async def test_close(memory_manager):
+    """Test closing manager releases resources."""
+    memory_manager.close()
+    assert memory_manager._store._conn is None
+
+
+async def test_async_initialize_failure(mock_hass, mock_embedding_engine):
+    """Test initialization failure when remote is down."""
+    mock_embedding_engine.async_initialize = AsyncMock()
+    mock_embedding_engine._engine = AsyncMock()
+    mock_embedding_engine._engine.async_get_version.return_value = False
+
+    with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
+        manager = MemoryManager(mock_hass, db_path=":memory:")
+        manager._embedding_engine = mock_embedding_engine
 
         with pytest.raises(RuntimeError, match="Remote embedding service is not reachable"):
-            await memory_manager.async_initialize()
+            await manager.async_initialize()
