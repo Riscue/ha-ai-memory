@@ -113,6 +113,60 @@ class MemoryManager:
             _LOGGER.error("Failed to get wing counts: %s", e)
         return counts
 
+    async def async_get_memories(
+        self,
+        limit: int = 50,
+        room: Optional[str] = None,
+        wing: Optional[str] = None,
+        scope: Optional[str] = None,
+        agent_id: Optional[str] = None,
+    ) -> List[Dict]:
+        """Get memories with optional filtering."""
+        conditions = []
+        params = []
+        
+        if room:
+            conditions.append("room = ?")
+            params.append(room)
+        if wing:
+            conditions.append("wing = ?")
+            params.append(wing)
+        if scope:
+            conditions.append("scope = ?")
+            params.append(scope)
+        if agent_id:
+            conditions.append("agent_id = ?")
+            params.append(agent_id)
+            
+        query = "SELECT id, content, scope, agent_id, created_at, summary, wing, room, layer FROM memories"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        memories = []
+        try:
+            rows = await self.hass.async_add_executor_job(
+                self._store.execute_query,
+                query,
+                tuple(params),
+            )
+            for row in rows:
+                memories.append({
+                    "id": row[0],
+                    "content": row[1],
+                    "scope": row[2],
+                    "agent_id": row[3],
+                    "created_at": row[4],
+                    "summary": row[5],
+                    "wing": row[6],
+                    "room": row[7],
+                    "layer": row[8],
+                })
+        except Exception as e:
+            _LOGGER.error("Failed to get memories: %s", e)
+        return memories
+
     async def async_add_memory(
         self,
         content: str,

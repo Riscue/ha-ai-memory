@@ -21,13 +21,100 @@ add_memory:
       required: false
       selector:
         text:
+  response:
+    optional: true
 
 list_memories:
   name: List Memories
   description: List all available AI memories with their details
+  fields:
+    limit:
+      name: Limit
+      description: Maximum number of memories to return (default 50)
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 1000
+    room:
+      name: Room
+      description: Filter by room
+      required: false
+      selector:
+        text:
+    wing:
+      name: Wing
+      description: Filter by wing
+      required: false
+      selector:
+        text:
+    scope:
+      name: Scope
+      description: Filter by scope (private or common)
+      required: false
+      selector:
+        select:
+          options:
+            - label: Private
+              value: "private"
+            - label: Common
+              value: "common"
+    agent_id:
+      name: Agent ID
+      description: Filter by agent ID
+      required: false
+      selector:
+        text:
   response:
-    type: "dict"
-    required: true
+    optional: true
+
+search_memory:
+  name: Search Memory
+  description: Search memories using semantic similarity
+  fields:
+    query:
+      name: Query
+      description: Search text to find relevant memories
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      description: Maximum number of results to return (default 5)
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 50
+    min_score:
+      name: Minimum Score
+      description: Minimum similarity score threshold (default 0.55)
+      required: false
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.05
+    room:
+      name: Room
+      description: Filter by room
+      required: false
+      selector:
+        text:
+    wing:
+      name: Wing
+      description: Filter by wing
+      required: false
+      selector:
+        text:
+    agent_id:
+      name: Agent ID
+      description: Filter by agent ID
+      required: false
+      selector:
+        text:
+  response:
+    optional: true
 
 delete_memory:
   name: Delete Memory
@@ -62,3 +149,5 @@ delete_memory:
       required: false
       selector:
         text:
+  response:
+    optional: true

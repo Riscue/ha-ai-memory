@@ -116,7 +116,7 @@ class DeleteMemoryTool(llm.Tool):
     parameters = vol.Schema({
         vol.Optional("room"): str,
         vol.Optional("wing"): str,
-        vol.Optional("scope"): vol.In(["private", "common", ""]),
+        vol.Optional("scope"): vol.In(["private", "common"]),
     })
 
     def __init__(self, memory_manager):

@@ -144,7 +144,7 @@ class MigrationManager:
         self._ensure_meta_table()
         current_version = self._get_version()
 
-        _LOGGER.info("Database schema version: %d, target: %d", current_version, DB_VERSION)
+        _LOGGER.debug("Database schema version: %d, target: %d", current_version, DB_VERSION)
 
         if current_version < 1:
             # Ensure base memories table exists (for fresh installs)
@@ -168,4 +168,4 @@ class MigrationManager:
                 )
             self._migrate_v0_to_v1()
 
-        _LOGGER.info("Database schema up to date (v%d)", DB_VERSION)
+        _LOGGER.debug("Database schema up to date (v%d)", DB_VERSION)
