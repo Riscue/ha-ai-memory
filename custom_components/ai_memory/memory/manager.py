@@ -1,5 +1,4 @@
 """Memory Manager for AI Memory integration (refactored)."""
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -7,19 +6,17 @@ from typing import List, Dict, Optional
 
 from homeassistant.core import HomeAssistant
 
-from ..constants import (
-    MEMORY_MAX_ENTRIES,
-    DEFAULT_STORAGE_PATH,
-    DEFAULT_WING,
-    DEFAULT_ROOM,
-    DEFAULT_LAYER,
-)
-from ..embedding.engine import EmbeddingEngine
-from ..palace.structure import PalaceStructure
-from ..palace.metadata import RoomDetector
 from .migration import MigrationManager
 from .search import MemorySearch
 from .store import MemoryStore
+from ..constants import (
+    MEMORY_MAX_ENTRIES,
+    DEFAULT_STORAGE_PATH,
+    DEFAULT_LAYER,
+)
+from ..embedding.engine import EmbeddingEngine
+from ..palace.metadata import RoomDetector
+from ..palace.structure import PalaceStructure
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -257,33 +254,80 @@ class MemoryManager:
             hass=self.hass,
         )
 
-    async def async_delete_memory(self, memory_id: str, agent_id: str) -> bool:
-        """Delete a memory entry.
+    async def async_delete_memory(
+            self,
+            agent_id: Optional[str] = None,
+            room: Optional[str] = None,
+            wing: Optional[str] = None,
+            scope: Optional[str] = None,
+    ) -> int:
+        """Delete memory entries by filter.
 
         Authorization: Private memories can only be deleted by their owner agent.
         Common memories can be deleted by any agent.
 
         Args:
-            memory_id: The memory ID to delete.
             agent_id: The requesting agent's ID.
+            room: Optional room name to delete all memories in that room.
+            wing: Optional wing name to delete all memories in that wing.
+            scope: Optional scope filter ('private', 'common', or None for both).
 
         Returns:
-            True if a memory was deleted, False otherwise.
+            Number of memories deleted.
         """
         try:
+            # Build query conditions
+            conditions = []
+            params = []
+
+            # Bulk deletion by room/wing
+            if room:
+                conditions.append("room = ?")
+                params.append(room)
+            if wing:
+                conditions.append("wing = ?")
+                params.append(wing)
+            if scope:
+                conditions.append("scope = ?")
+                params.append(scope)
+
+            if not conditions:
+                _LOGGER.warning("No deletion criteria provided")
+                return 0
+
+            # Authorization for bulk deletion
+            if agent_id:
+                conditions.append("(scope = 'common' OR agent_id = ?)")
+                params.append(agent_id)
+            else:
+                conditions.append("scope = 'common'")
+
+            query = f"DELETE FROM memories WHERE {' AND '.join(conditions)}"
+
+            # Get count before deletion
+            count_query = f"SELECT COUNT(*) FROM memories WHERE {' AND '.join(conditions)}"
+            count_res = await self.hass.async_add_executor_job(
+                self._store.execute_query,
+                count_query,
+                tuple(params),
+            )
+            deleted_count = count_res[0][0] if count_res else 0
+
+            # Execute deletion
             await self.hass.async_add_executor_job(
                 self._store.execute_commit,
-                "DELETE FROM memories WHERE id = ? AND (scope = 'common' OR agent_id = ?)",
-                (memory_id, agent_id),
+                query,
+                tuple(params),
             )
 
             if hasattr(self.hass, "bus"):
                 self.hass.bus.async_fire("ai_memory_updated")
 
-            return True
+            _LOGGER.info("Deleted %d memory(s)", deleted_count)
+            return deleted_count
         except Exception as e:
             _LOGGER.error("Failed to delete memory: %s", e)
-            return False
+            return 0
 
     def close(self):
         """Close database connection and release resources."""

@@ -6,14 +6,21 @@ add_memory:
       name: Text
       description: The text content to remember
       required: true
-      example: "User prefers dark mode and hates bright colors"
       selector:
         text:
           multiline: true
-
-clear_memory:
-  name: Clear Memory
-  description: Clear all entries from AI memory
+    room:
+      name: Room
+      description: Optional room name for grouping related memories (e.g., camera_events, user_preferences)
+      required: false
+      selector:
+        text:
+    wing:
+      name: Wing
+      description: Optional wing name for broader categorization (e.g., security, automation)
+      required: false
+      selector:
+        text:
 
 list_memories:
   name: List Memories
@@ -24,11 +31,34 @@ list_memories:
 
 delete_memory:
   name: Delete Memory
-  description: Delete a specific memory by ID
+  description: Delete memory by room/wing
   fields:
-    memory_id:
-      name: Memory ID
-      description: The ID of the memory to delete
-      required: true
+    room:
+      name: Room
+      description: Delete all memories in this room
+      required: false
+      selector:
+        text:
+    wing:
+      name: Wing
+      description: Delete all memories in this wing
+      required: false
+      selector:
+        text:
+    scope:
+      name: Scope
+      description: Filter by scope (private or common)
+      required: false
+      selector:
+        select:
+          options:
+            - label: Private
+              value: "private"
+            - label: Common
+              value: "common"
+    agent_id:
+      name: Agent ID
+      description: Filter by agent ID (required to delete private memories)
+      required: false
       selector:
         text:

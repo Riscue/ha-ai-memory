@@ -1,7 +1,7 @@
 """AI Long Term Memory component."""
 import logging
-import voluptuous as vol
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -13,11 +13,20 @@ from .memory.manager import MemoryManager
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_ADD_MEMORY = "add_memory"
-SERVICE_CLEAR_MEMORY = "clear_memory"
 SERVICE_LIST_MEMORIES = "list_memories"
+SERVICE_DELETE_MEMORY = "delete_memory"
 
 ADD_MEMORY_SCHEMA = vol.Schema({
     vol.Required("text"): str,
+    vol.Optional("room"): str,
+    vol.Optional("wing"): str,
+})
+
+DELETE_MEMORY_SCHEMA = vol.Schema({
+    vol.Optional("room"): str,
+    vol.Optional("wing"): str,
+    vol.Optional("scope"): vol.In(["private", "common"]),
+    vol.Optional("agent_id"): str,
 })
 
 
@@ -74,20 +83,9 @@ def _register_services(hass: HomeAssistant):
             return
 
         text = call.data.get("text", "")
-        await manager.async_add_memory(text, "common")
-
-    async def handle_clear_memory(call: ServiceCall):
-        """Handle clear_memory service call."""
-        manager = hass.data.get(DOMAIN, {}).get("manager")
-        if not manager:
-            _LOGGER.error("Memory manager not initialized")
-            return
-
-        await hass.async_add_executor_job(
-            manager._store.execute_commit,
-            "DELETE FROM memories"
-        )
-        _LOGGER.info("All memories cleared")
+        room = call.data.get("room")
+        wing = call.data.get("wing")
+        await manager.async_add_memory(text, "common", room=room, wing=wing)
 
     async def handle_list_memories(call: ServiceCall):
         """Handle list_memories service call."""
@@ -99,9 +97,29 @@ def _register_services(hass: HomeAssistant):
         counts = await manager.async_get_memory_counts()
         _LOGGER.info("Memory counts: %s", counts)
 
+    async def handle_delete_memory(call: ServiceCall):
+        """Handle delete_memory service call."""
+        manager = hass.data.get(DOMAIN, {}).get("manager")
+        if not manager:
+            _LOGGER.error("Memory manager not initialized")
+            return
+
+        room = call.data.get("room")
+        wing = call.data.get("wing")
+        scope = call.data.get("scope")
+        agent_id = call.data.get("agent_id")
+
+        count = await manager.async_delete_memory(
+            agent_id=agent_id,
+            room=room,
+            wing=wing,
+            scope=scope,
+        )
+        _LOGGER.info("Deleted %d memory(s)", count)
+
     hass.services.async_register(DOMAIN, SERVICE_ADD_MEMORY, handle_add_memory, schema=ADD_MEMORY_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_CLEAR_MEMORY, handle_clear_memory)
     hass.services.async_register(DOMAIN, SERVICE_LIST_MEMORIES, handle_list_memories)
+    hass.services.async_register(DOMAIN, SERVICE_DELETE_MEMORY, handle_delete_memory, schema=DELETE_MEMORY_SCHEMA)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry):
@@ -119,7 +137,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
             manager.close()
 
         # Remove services
-        for service in [SERVICE_ADD_MEMORY, SERVICE_CLEAR_MEMORY, SERVICE_LIST_MEMORIES]:
+        for service in [SERVICE_ADD_MEMORY, SERVICE_LIST_MEMORIES, SERVICE_DELETE_MEMORY]:
             hass.services.async_remove(DOMAIN, service)
 
     return unload_ok

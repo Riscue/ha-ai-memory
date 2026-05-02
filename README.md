@@ -95,16 +95,6 @@ service: ai_memory.list_memories
 response_variable: memories
 ```
 
-#### `ai_memory.clear_memory`
-
-Wipe all memories for a sensor.
-
-```yaml
-service: ai_memory.clear_memory
-data:
-  memory_id: sensor.ai_memory_store
-```
-
 ## 🐛 Troubleshooting
 
 - **"No embedding engine available"**: Ensure you have selected a supported engine for your hardware. Try switching to

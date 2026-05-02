@@ -179,13 +179,10 @@ async def test_cosine_similarity_edge_cases():
 
 async def test_async_delete_memory_own_private(memory_manager):
     """Test agent can delete its own private memory."""
-    await memory_manager.async_add_memory("Secret", "private", "agent_1")
+    await memory_manager.async_add_memory("Secret", "private", "agent_1", room="living_room")
 
-    rows = memory_manager._store.execute_query("SELECT id FROM memories")
-    memory_id = rows[0][0]
-
-    result = await memory_manager.async_delete_memory(memory_id, "agent_1")
-    assert result is True
+    result = await memory_manager.async_delete_memory(agent_id="agent_1", room="living_room")
+    assert result == 1
 
     rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
     assert rows[0][0] == 0
@@ -193,13 +190,10 @@ async def test_async_delete_memory_own_private(memory_manager):
 
 async def test_async_delete_memory_cannot_delete_other_private(memory_manager):
     """Test agent cannot delete another agent's private memory."""
-    await memory_manager.async_add_memory("Secret", "private", "agent_1")
+    await memory_manager.async_add_memory("Secret", "private", "agent_1", room="living_room")
 
-    rows = memory_manager._store.execute_query("SELECT id FROM memories")
-    memory_id = rows[0][0]
-
-    result = await memory_manager.async_delete_memory(memory_id, "agent_2")
-    assert result is True  # SQL executes but doesn't match any rows
+    result = await memory_manager.async_delete_memory(agent_id="agent_2", room="living_room")
+    assert result == 0
 
     # Memory should still exist
     rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
@@ -208,13 +202,10 @@ async def test_async_delete_memory_cannot_delete_other_private(memory_manager):
 
 async def test_async_delete_memory_any_agent_can_delete_common(memory_manager):
     """Test any agent can delete common memory."""
-    await memory_manager.async_add_memory("Shared fact", "common")
+    await memory_manager.async_add_memory("Shared fact", "common", room="kitchen")
 
-    rows = memory_manager._store.execute_query("SELECT id FROM memories")
-    memory_id = rows[0][0]
-
-    result = await memory_manager.async_delete_memory(memory_id, "any_agent")
-    assert result is True
+    result = await memory_manager.async_delete_memory(agent_id="any_agent", room="kitchen")
+    assert result == 1
 
     rows = memory_manager._store.execute_query("SELECT COUNT(*) FROM memories")
     assert rows[0][0] == 0

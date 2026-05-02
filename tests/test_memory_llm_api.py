@@ -159,13 +159,29 @@ async def test_delete_memory_tool(mock_manager):
     """Test DeleteMemoryTool."""
     tool = DeleteMemoryTool(mock_manager)
     hass = MagicMock(spec=HomeAssistant)
+    mock_manager.async_delete_memory.return_value = 1
 
-    tool_input = MockToolInput({"memory_id": "test-id"})
+    tool_input = MockToolInput({"room": "living_room"})
     llm_context = MockLLMContext("agent_1")
 
     result = await tool.async_call(hass, tool_input, llm_context)
     assert result["success"] is True
-    mock_manager.async_delete_memory.assert_called_with("test-id", "agent_1")
+    assert "Deleted 1" in result["message"]
+    mock_manager.async_delete_memory.assert_called_with(agent_id="agent_1", room="living_room", wing=None, scope=None)
+
+
+async def test_delete_memory_tool_validation_error(mock_manager):
+    """Test DeleteMemoryTool fails without filters."""
+    tool = DeleteMemoryTool(mock_manager)
+    hass = MagicMock(spec=HomeAssistant)
+
+    tool_input = MockToolInput({})
+    llm_context = MockLLMContext("agent_1")
+
+    result = await tool.async_call(hass, tool_input, llm_context)
+    assert result["success"] is False
+    assert "at least one filter" in result["message"]
+    mock_manager.async_delete_memory.assert_not_called()
 
 
 async def test_get_api_instance_success(mock_manager):
