@@ -15,7 +15,11 @@ class AddMemoryTool(llm.Tool):
     """Tool to add information to memory."""
 
     name = "add_memory"
-    description = "Save information to long-term memory"
+    description = (
+        "Save information to long-term memory."
+        "Use 'room' to group related memories (e.g., 'camera_events', 'user_preferences', 'home_status')."
+        "Use 'wing' for broader categories (e.g., 'security', 'automation', 'settings')."
+    )
 
     parameters = vol.Schema({
         vol.Required("content"): str,
@@ -101,13 +105,18 @@ class SearchMemoryTool(llm.Tool):
 
 
 class DeleteMemoryTool(llm.Tool):
-    """Tool to delete a specific memory."""
+    """Tool to delete memories by room, or wing."""
 
     name = "delete_memory"
-    description = "Delete a specific memory by ID"
+    description = (
+        "Delete memories by room, wing, or scope. "
+        "At least one filter (room, wing, or scope) should be provided."
+    )
 
     parameters = vol.Schema({
-        vol.Required("memory_id"): str,
+        vol.Optional("room"): str,
+        vol.Optional("wing"): str,
+        vol.Optional("scope"): vol.In(["private", "common"]),
     })
 
     def __init__(self, memory_manager):
@@ -116,15 +125,26 @@ class DeleteMemoryTool(llm.Tool):
     async def async_call(
         self, hass: HomeAssistant, tool_input: llm.ToolInput, llm_context: llm.LLMContext
     ) -> JsonObjectType:
-        memory_id = tool_input.tool_args.get("memory_id")
+        room = tool_input.tool_args.get("room", "") or None
+        wing = tool_input.tool_args.get("wing", "") or None
+        scope = tool_input.tool_args.get("scope", "") or None
         agent_id = llm_context.platform
 
+        if not any([room, wing, scope]):
+            return {"success": False, "message": "You must provide at least one filter (room, wing, or scope)."}
+
         try:
-            result = await self.memory_manager.async_delete_memory(memory_id, agent_id)
-            if result:
-                return {"success": True, "message": f"Memory {memory_id} deleted."}
-            else:
-                return {"success": False, "message": "Memory not found or not authorized."}
+            count = await self.memory_manager.async_delete_memory(
+                agent_id=agent_id,
+                room=room,
+                wing=wing,
+                scope=scope,
+            )
+
+            return {
+                "success": True,
+                "message": f"Deleted {count} memor(y/ies) from {room or wing or scope or 'all'}."
+            }
         except Exception as e:
             _LOGGER.error("Error deleting memory: %s", e)
             raise
