@@ -4,7 +4,7 @@ import logging
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 
 from . import memory_llm_api
 from .constants import DOMAIN, ENGINE_TFIDF, MEMORY_MAX_ENTRIES
@@ -80,29 +80,31 @@ def _register_services(hass: HomeAssistant):
         manager = hass.data.get(DOMAIN, {}).get("manager")
         if not manager:
             _LOGGER.error("Memory manager not initialized")
-            return
+            return {"error": "Memory manager not initialized"}
 
         text = call.data.get("text", "")
         room = call.data.get("room")
         wing = call.data.get("wing")
         await manager.async_add_memory(text, "common", room=room, wing=wing)
+        return {"success": True}
 
     async def handle_list_memories(call: ServiceCall):
         """Handle list_memories service call."""
         manager = hass.data.get(DOMAIN, {}).get("manager")
         if not manager:
             _LOGGER.error("Memory manager not initialized")
-            return
+            return {"error": "Memory manager not initialized"}
 
         counts = await manager.async_get_memory_counts()
         _LOGGER.info("Memory counts: %s", counts)
+        return counts
 
     async def handle_delete_memory(call: ServiceCall):
         """Handle delete_memory service call."""
         manager = hass.data.get(DOMAIN, {}).get("manager")
         if not manager:
             _LOGGER.error("Memory manager not initialized")
-            return
+            return {"error": "Memory manager not initialized"}
 
         room = call.data.get("room")
         wing = call.data.get("wing")
@@ -116,10 +118,11 @@ def _register_services(hass: HomeAssistant):
             scope=scope,
         )
         _LOGGER.info("Deleted %d memory(s)", count)
+        return {"deleted_count": count}
 
-    hass.services.async_register(DOMAIN, SERVICE_ADD_MEMORY, handle_add_memory, schema=ADD_MEMORY_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_LIST_MEMORIES, handle_list_memories)
-    hass.services.async_register(DOMAIN, SERVICE_DELETE_MEMORY, handle_delete_memory, schema=DELETE_MEMORY_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_ADD_MEMORY, handle_add_memory, schema=ADD_MEMORY_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_LIST_MEMORIES, handle_list_memories, supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_DELETE_MEMORY, handle_delete_memory, schema=DELETE_MEMORY_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry):
