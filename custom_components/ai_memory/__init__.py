@@ -7,7 +7,13 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 
 from . import memory_llm_api
-from .constants import DOMAIN, ENGINE_TFIDF, MEMORY_MAX_ENTRIES
+from .constants import (
+    DOMAIN,
+    MEMORY_MAX_ENTRIES,
+    PROVIDER_NAMES,
+    PROVIDER_OLLAMA,
+    resolve_engine_type,
+)
 from .memory.manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,6 +60,24 @@ async def async_setup(hass: HomeAssistant, config: dict):
     return True
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old config entries to the current version."""
+    if entry.version > 3:
+        # Downgraded from a future version; refuse to guess.
+        return False
+
+    if entry.version < 3:
+        # v2 -> v3: pre-provider the only values were "remote" and "tfidf",
+        # so anything that isn't already a provider is the legacy "remote".
+        new_data = {**entry.data}
+        if new_data.get("embedding_engine") not in PROVIDER_NAMES:
+            new_data["embedding_engine"] = PROVIDER_OLLAMA
+        hass.config_entries.async_update_entry(entry, data=new_data, version=3)
+        _LOGGER.debug("Migrated AI Memory entry to version 3")
+
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up AI Memory from a config entry."""
     if DOMAIN not in hass.data:
@@ -65,7 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         return True
 
     # Initialize Single Memory Manager
-    engine_type = entry.data.get("embedding_engine", ENGINE_TFIDF)
+    engine_type = resolve_engine_type(entry.data.get("embedding_engine"))
     max_entries = entry.data.get("max_entries", MEMORY_MAX_ENTRIES)
 
     manager = MemoryManager(hass, engine_type, max_entries, config_data=entry.data)
