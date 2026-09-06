@@ -52,8 +52,8 @@ with patch.dict("sys.modules", {
     "homeassistant.components.llm": mock_llm,
     "homeassistant.helpers.llm": mock_llm
 }):
-    from custom_components.ai_memory.llm import api as llm_api
-    from custom_components.ai_memory.llm.tools import AddMemoryTool, SearchMemoryTool, DeleteMemoryTool
+    from custom_components.ai_memory.llm_api import api as llm_api
+    from custom_components.ai_memory.llm_api.tools import AddMemoryTool, SearchMemoryTool, DeleteMemoryTool
     from custom_components.ai_memory import memory_llm_api
 
     import importlib
