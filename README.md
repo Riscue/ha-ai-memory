@@ -1,4 +1,4 @@
-# 🧠 AI Long Term Memory for Home Assistant
+# 🧠 AI Memory for Home Assistant
 
 [![Home Assistant](https://img.shields.io/badge/home%20assistant-%2341BDF5.svg?style=for-the-badge&logo=home-assistant&logoColor=white)](https://home-assistant.io)
 [![hacs](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://www.hacs.xyz/docs/faq/custom_repositories/)
@@ -51,7 +51,7 @@ recall them through vector similarity search.
 ### HACS (recommended)
 
 Add this repository as a [custom repository](https://www.hacs.xyz/docs/faq/custom_repositories/)
-in HACS, then install **AI Long Term Memory**.
+in HACS, then install **AI Memory**.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Riscue&repository=ha-ai-memory)
 

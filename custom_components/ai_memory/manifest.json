@@ -1,6 +1,6 @@
 {
   "domain": "ai_memory",
-  "name": "AI Long Term Memory",
+  "name": "AI Memory",
   "codeowners": [
     "@Riscue"
   ],

@@ -1,4 +1,4 @@
-"""AI Long Term Memory component."""
+"""AI Memory component."""
 import logging
 
 import voluptuous as vol
