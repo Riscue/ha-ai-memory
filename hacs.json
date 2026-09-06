@@ -1,5 +1,6 @@
 {
   "name": "AI Memory",
+  "homeassistant": "2025.11.3",
   "zip_release": true,
   "render_readme": true,
   "filename": "ai_memory.zip"

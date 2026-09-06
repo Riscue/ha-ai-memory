@@ -21,8 +21,6 @@ add_memory:
       required: false
       selector:
         text:
-  response:
-    optional: true
 
 list_memories:
   name: List Memories
@@ -65,8 +63,6 @@ list_memories:
       required: false
       selector:
         text:
-  response:
-    optional: true
 
 search_memory:
   name: Search Memory
@@ -113,8 +109,6 @@ search_memory:
       required: false
       selector:
         text:
-  response:
-    optional: true
 
 delete_memory:
   name: Delete Memory
@@ -149,5 +143,3 @@ delete_memory:
       required: false
       selector:
         text:
-  response:
-    optional: true

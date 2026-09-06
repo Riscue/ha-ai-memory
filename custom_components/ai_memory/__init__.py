@@ -5,6 +5,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.helpers import config_validation as cv
 
 from . import memory_llm_api
 from .constants import (
@@ -17,6 +18,8 @@ from .constants import (
 from .memory.manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SERVICE_ADD_MEMORY = "add_memory"
 SERVICE_LIST_MEMORIES = "list_memories"
