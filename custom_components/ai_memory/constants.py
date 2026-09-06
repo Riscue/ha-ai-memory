@@ -13,15 +13,44 @@ EMBEDDINGS_VECTOR_DIM = 384  # Default; auto-detected from model at runtime
 DEFAULT_MODEL = "bge-m3"
 DEFAULT_REMOTE_URL = "http://127.0.0.1:11434"
 
-# Embedding engine types
+# Embedding engine types (internal)
 ENGINE_REMOTE = "remote"
 ENGINE_TFIDF = "tfidf"
 
+# Embedding providers (config-flow facing values stored in entry data)
+PROVIDER_OLLAMA = "ollama"
+PROVIDER_OPENAI = "openai_compatible"
+PROVIDER_TFIDF = "tfidf"
+
 # User-friendly names for UI
-ENGINE_NAMES = {
-    ENGINE_REMOTE: "Remote Service (Recommended - Docker/Ollama)",
-    ENGINE_TFIDF: "TF-IDF (Fallback - No Dependencies)",
+PROVIDER_NAMES = {
+    PROVIDER_OLLAMA: "Ollama",
+    PROVIDER_OPENAI: "OpenAI-compatible (llama.cpp, LM Studio, vLLM, TEI)",
+    PROVIDER_TFIDF: "TF-IDF (Fallback - No Dependencies)",
 }
+
+# Remote API flavors
+API_FLAVOR_OLLAMA = "ollama"
+API_FLAVOR_OPENAI = "openai"
+
+
+def resolve_engine_type(provider: str) -> str:
+    """Map a stored provider value to an internal engine type.
+
+    Historically the only values were "remote" and "tfidf", and the
+    migration rewrites "remote" to "ollama" — so anything that isn't
+    TF-IDF is a remote-flavored provider.
+    """
+    if provider == PROVIDER_TFIDF:
+        return ENGINE_TFIDF
+    return ENGINE_REMOTE
+
+
+def resolve_flavor(provider: str) -> str:
+    """Map a stored provider value to a remote API flavor."""
+    if provider == PROVIDER_OPENAI:
+        return API_FLAVOR_OPENAI
+    return API_FLAVOR_OLLAMA
 
 # Default storage path (relative to HA config)
 DEFAULT_STORAGE_PATH = "ai_memory.db"

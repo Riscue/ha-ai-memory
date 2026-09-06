@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI Memory",
+        "description": "Persistent semantic memory for Assist LLM agents.",
+        "data": {
+          "max_entries": "Maximum number of memories",
+          "embedding_engine": "Embedding provider"
+        }
+      },
+      "remote_config": {
+        "title": "Embedding server connection",
+        "description": "Base URL of the server without a trailing slash. For OpenAI-compatible servers this is the base URL; the integration appends /v1/embeddings.",
+        "data": {
+          "remote_url": "Base URL",
+          "api_key": "API key (optional)"
+        }
+      },
+      "model_selection": {
+        "title": "Embedding model",
+        "description": "Pick a model from the server, or type the model name manually when the list cannot be fetched.",
+        "data": {
+          "model_name": "Model"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "The URL must start with http:// or https://",
+      "cannot_connect": "Failed to connect to the server",
+      "pull_failed": "Failed to load the model on the server",
+      "models_fetch_failed": "Could not fetch the model list — enter the model name manually"
+    },
+    "abort": {
+      "single_instance_allowed": "Only one AI Memory entry is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AI Memory options",
+        "data": {
+          "max_entries": "Maximum number of memories",
+          "embedding_engine": "Embedding provider"
+        }
+      },
+      "remote_config": {
+        "title": "Embedding server connection",
+        "description": "Base URL of the server without a trailing slash. For OpenAI-compatible servers this is the base URL; the integration appends /v1/embeddings.",
+        "data": {
+          "remote_url": "Base URL",
+          "api_key": "API key (optional)"
+        }
+      },
+      "model_selection": {
+        "title": "Embedding model",
+        "description": "Pick a model from the server, or type the model name manually when the list cannot be fetched.",
+        "data": {
+          "model_name": "Model"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "The URL must start with http:// or https://",
+      "cannot_connect": "Failed to connect to the server",
+      "pull_failed": "Failed to load the model on the server",
+      "models_fetch_failed": "Could not fetch the model list — enter the model name manually"
+    }
+  }
+}

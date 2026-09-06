@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI Memory",
+        "description": "Assist LLM ajanları için kalıcı anlamsal hafıza.",
+        "data": {
+          "max_entries": "Maksimum anı sayısı",
+          "embedding_engine": "Embedding sağlayıcısı"
+        }
+      },
+      "remote_config": {
+        "title": "Embedding sunucu bağlantısı",
+        "description": "Sunucunun sondaki eğik çizgi olmadan temel adresi. OpenAI uyumlu sunucularda bu temel adrestir; entegrasyon /v1/embeddings yolunu kendisi ekler.",
+        "data": {
+          "remote_url": "Temel adres",
+          "api_key": "API anahtarı (isteğe bağlı)"
+        }
+      },
+      "model_selection": {
+        "title": "Embedding modeli",
+        "description": "Sunucudan bir model seçin ya da liste alınamadığında model adını elle yazın.",
+        "data": {
+          "model_name": "Model"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Adres http:// veya https:// ile başlamalı",
+      "cannot_connect": "Sunucuya bağlanamadı",
+      "pull_failed": "Model sunucuda yüklenemedi",
+      "models_fetch_failed": "Model listesi alınamadı — model adını elle girin"
+    },
+    "abort": {
+      "single_instance_allowed": "Yalnızca bir AI Memory kaydına izin verilir."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AI Memory seçenekleri",
+        "data": {
+          "max_entries": "Maksimum anı sayısı",
+          "embedding_engine": "Embedding sağlayıcısı"
+        }
+      },
+      "remote_config": {
+        "title": "Embedding sunucu bağlantısı",
+        "description": "Sunucunun sondaki eğik çizgi olmadan temel adresi. OpenAI uyumlu sunucularda bu temel adrestir; entegrasyon /v1/embeddings yolunu kendisi ekler.",
+        "data": {
+          "remote_url": "Temel adres",
+          "api_key": "API anahtarı (isteğe bağlı)"
+        }
+      },
+      "model_selection": {
+        "title": "Embedding modeli",
+        "description": "Sunucudan bir model seçin ya da liste alınamadığında model adını elle yazın.",
+        "data": {
+          "model_name": "Model"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Adres http:// veya https:// ile başlamalı",
+      "cannot_connect": "Sunucuya bağlanamadı",
+      "pull_failed": "Model sunucuda yüklenemedi",
+      "models_fetch_failed": "Model listesi alınamadı — model adını elle girin"
+    }
+  }
+}
