@@ -12,7 +12,7 @@
 [![GitHub Release](https://img.shields.io/github/release/Riscue/ha-ai-memory.svg?style=for-the-badge)](https://github.com/Riscue/ha-ai-memory/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/Riscue/ha-ai-memory.svg?style=for-the-badge)](https://github.com/Riscue/ha-ai-memory/commits/master)
 
-![Icon](custom_components/ai_memory/brand/logo.png)
+![Icon](custom_components/ai_memory/brand/icon.png)
 
 [![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ai_memory)
 
