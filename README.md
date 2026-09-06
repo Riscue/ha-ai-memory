@@ -99,7 +99,7 @@ rewrite the identity text without removing the integration.
 ## 🤖 Usage — LLM tools (automatic)
 
 Once installed, three tools are exposed to every Assist agent. The agent decides when to call them
-based on the system prompt bundled with the integration (`llm/prompts.py`):
+based on the system prompt bundled with the integration (`llm_api/prompts.py`):
 
 | Tool            | Purpose                                                                                  |
 |-----------------|------------------------------------------------------------------------------------------|
@@ -313,7 +313,7 @@ custom_components/ai_memory/
 ├── services.yaml          # field selectors + descriptions for the 4 services
 ├── sensor.py              # listens to ai_memory_updated, exposes counts
 ├── embedding/             # EmbeddingEngine + remote/tfidf backends
-├── llm/                   # api.py (registration), tools.py, prompts.py
+├── llm_api/               # api.py (registration), tools.py, prompts.py
 ├── memory/                # manager, store, search, migration, layers
 └── palace/                # structure, defaults, metadata, hall_tunnel (stub)
 ```
