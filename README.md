@@ -33,9 +33,9 @@ recall them through vector similarity search.
 - **Privacy-first scopes**: `private` (only the owning agent sees it) vs `common` (all agents share
   it). Wings carry a default scope so household/personal data lands in the right place.
 - **Local-first**: All data stays on your HA instance. SQLite + WAL, embeddings cached on disk.
-- **Three embedding providers, graceful fallback**: a native Ollama API, an
+- **Three embedding providers**: a native Ollama API, an
   OpenAI-compatible endpoint (`/v1/embeddings` — llama.cpp `llama-server`, LM Studio, vLLM,
-  LocalAI, Infinity, HuggingFace TEI, …), or a zero-dependency TF-IDF fallback.
+  LocalAI, Infinity, HuggingFace TEI, …), or a zero-dependency TF-IDF engine.
 
 ## 📋 Requirements
 
@@ -290,8 +290,9 @@ Use it in templates, dashboards, or to trigger automations when memory changes.
 - **Setup fails with `"Remote embedding service is not reachable"`** — the manager probes
   `/api/version` (Ollama) or `/v1/models` (OpenAI-compatible) during startup. Make sure the server
   is running at the URL you configured, or switch the provider to `tfidf` (no probe, always works).
-- **`"No embedding engine available. Please check logs."`** — both the requested engine and the
-  TF-IDF fallback failed to initialize. Check the HA log for the underlying cause; usually a
+- **`"Embedding engine '…' failed to initialize. Please check logs."`** — the configured engine
+  could not be created. There is no automatic switch to another engine, because embeddings from
+  different engines can't be compared. Check the HA log for the underlying cause; usually a
   missing remote URL or a permissions issue writing the TF-IDF vocab file.
 - **Model not pulled** — re-enter the config flow's *Model selection* step; the integration pulls
   models on demand via `/api/pull` with a 300 s timeout (Ollama only). First pull of a large model

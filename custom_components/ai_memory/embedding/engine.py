@@ -18,7 +18,7 @@ _EMBEDDING_CACHE_MAX = 100
 class EmbeddingEngine:
     """Engine to generate vector embeddings from text with multiple backends.
 
-    Supports multiple embedding engines with automatic fallback:
+    Backends:
     1. Remote Service (Recommended)
     2. TF-IDF (Lightweight, No Dependencies)
     """
@@ -81,32 +81,21 @@ class EmbeddingEngine:
             return False
 
     def _initialize_engine(self):
-        """Initialize the embedding engine with strict fallback to TF-IDF."""
+        """Initialize the configured embedding engine.
+
+        There is deliberately no fallback to another engine: vectors from
+        different engines are not comparable, so silently switching would
+        mix incompatible embeddings in the database.
+        """
         if self._initialized:
             return
 
-        _LOGGER.debug("Initializing embedding engine (requested: %s)", self._engine_type)
+        _LOGGER.debug("Initializing embedding engine: %s", self._engine_type)
 
-        success = False
-
-        # 1. Try requested engine
-        if self._try_initialize_engine(self._engine_type):
-            success = True
-        else:
-            _LOGGER.warning(
-                "Requested engine '%s' failed. Falling back to TF-IDF.",
-                self._engine_type
+        if not self._try_initialize_engine(self._engine_type):
+            raise RuntimeError(
+                f"Embedding engine '{self._engine_type}' failed to initialize. Please check logs."
             )
-
-            # 2. Strict Fallback to TF-IDF
-            if self._engine_type != ENGINE_TFIDF:
-                if self._try_initialize_engine(ENGINE_TFIDF):
-                    success = True
-                else:
-                    _LOGGER.error("Fallback to TF-IDF failed.")
-
-        if not success:
-            raise RuntimeError("No embedding engine available. Please check logs.")
 
         self._initialized = True
 

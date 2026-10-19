@@ -48,28 +48,19 @@ class TestEmbeddingEngine:
         mock_create.assert_called_once_with(ENGINE_TFIDF)
 
     @patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine._create_engine")
-    async def test_initialize_engine_fallback(self, mock_create, mock_hass):
-        """Test strict fallback to TF-IDF."""
-        # First attempt (Remote) fails, Second (TF-IDF) succeeds
-        mock_tfidf = MagicMock()
-
-        def side_effect(engine_type):
-            if engine_type == ENGINE_REMOTE:
-                return None
-            if engine_type == ENGINE_TFIDF:
-                return mock_tfidf
-            return None
-
-        mock_create.side_effect = side_effect
+    async def test_initialize_engine_no_fallback(self, mock_create, mock_hass):
+        """A failing remote engine raises instead of silently switching to TF-IDF."""
+        mock_create.side_effect = lambda engine_type: (
+            MagicMock() if engine_type == ENGINE_TFIDF else None
+        )
 
         engine = EmbeddingEngine(mock_hass, ENGINE_REMOTE)
-        await engine.async_initialize()
+        with pytest.raises(RuntimeError, match="'remote' failed to initialize"):
+            await engine.async_initialize()
 
-        assert engine._initialized is True
-        assert engine._engine == mock_tfidf
-        assert engine._engine_name == ENGINE_TFIDF
-        mock_create.assert_any_call(ENGINE_REMOTE)
-        mock_create.assert_called_with(ENGINE_TFIDF)
+        assert engine._initialized is False
+        assert engine._engine is None
+        mock_create.assert_called_once_with(ENGINE_REMOTE)
 
     @patch("custom_components.ai_memory.embedding.engine.EmbeddingEngine._create_engine")
     async def test_initialize_engine_all_fail(self, mock_create, mock_hass):
@@ -78,7 +69,7 @@ class TestEmbeddingEngine:
 
         engine = EmbeddingEngine(mock_hass, ENGINE_TFIDF)
 
-        with pytest.raises(RuntimeError, match="No embedding engine available"):
+        with pytest.raises(RuntimeError, match="failed to initialize"):
             await engine.async_initialize()
 
         assert engine._initialized is False
@@ -160,7 +151,6 @@ class TestEmbeddingEngine:
 
         engine = EmbeddingEngine(mock_hass, ENGINE_TFIDF)
 
-        # Should raise RuntimeError because fallback also fails (mock_create returns None for everything)
         with pytest.raises(RuntimeError):
             await engine.async_initialize()
 

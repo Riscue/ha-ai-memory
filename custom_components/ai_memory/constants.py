@@ -26,7 +26,7 @@ PROVIDER_TFIDF = "tfidf"
 PROVIDER_NAMES = {
     PROVIDER_OLLAMA: "Ollama",
     PROVIDER_OPENAI: "OpenAI-compatible (llama.cpp, LM Studio, vLLM, TEI)",
-    PROVIDER_TFIDF: "TF-IDF (Fallback - No Dependencies)",
+    PROVIDER_TFIDF: "TF-IDF (No Dependencies)",
 }
 
 # Remote API flavors

@@ -110,15 +110,12 @@ class MemoryManager:
                     _LOGGER.error("Remote embedding service is NOT reachable at startup.")
                     raise RuntimeError("Remote embedding service is not reachable")
 
-            # Only touch stored vectors when TF-IDF is the configured engine, so a
-            # transient fallback doesn't overwrite a remote model's embeddings.
             if self._engine_type == ENGINE_TFIDF:
-                if self._embedding_engine.engine_name == ENGINE_TFIDF:
-                    count = await self.hass.async_add_executor_job(
-                        self._reembed_tfidf_if_needed
-                    )
-                    if count:
-                        _LOGGER.info("Re-embedded %d memories with stable TF-IDF hashing", count)
+                count = await self.hass.async_add_executor_job(
+                    self._reembed_tfidf_if_needed
+                )
+                if count:
+                    _LOGGER.info("Re-embedded %d memories with stable TF-IDF hashing", count)
             else:
                 await self.hass.async_add_executor_job(self._clear_tfidf_marker)
 
