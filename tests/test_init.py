@@ -61,13 +61,15 @@ async def test_setup_entry_already_initialized(hass: HomeAssistant, mock_config_
 async def test_unload_entry(hass: HomeAssistant, mock_config_entry):
     """Test unload entry."""
     mock_config_entry.add_to_hass(hass)
-    hass.data[DOMAIN] = {"manager": MagicMock()}
+    manager = MagicMock()
+    hass.data[DOMAIN] = {"manager": manager}
 
     with patch("homeassistant.config_entries.ConfigEntries.async_unload_platforms", return_value=True):
         assert await async_unload_entry(hass, mock_config_entry)
 
-        # Manager should be removed
+        # Manager should be removed and its DB connection closed
         assert "manager" not in hass.data[DOMAIN]
+        manager.close.assert_called_once()
 
 
 async def test_unload_entry_failure(hass: HomeAssistant, mock_config_entry):

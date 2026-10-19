@@ -247,7 +247,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     if unload_ok:
         manager = hass.data[DOMAIN].pop("manager", None)
         if manager:
-            manager.close()
+            await hass.async_add_executor_job(manager.close)
 
         # Remove services
         for service in [SERVICE_ADD_MEMORY, SERVICE_LIST_MEMORIES, SERVICE_SEARCH_MEMORY, SERVICE_DELETE_MEMORY]:
