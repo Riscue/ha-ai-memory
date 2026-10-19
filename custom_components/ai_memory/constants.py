@@ -52,7 +52,7 @@ def resolve_flavor(provider: str) -> str:
         return API_FLAVOR_OPENAI
     return API_FLAVOR_OLLAMA
 
-# Default storage path (relative to HA config)
+# Default storage path (resolved with hass.config.path)
 DEFAULT_STORAGE_PATH = "ai_memory.db"
 
 # Palace defaults

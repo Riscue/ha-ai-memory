@@ -181,3 +181,29 @@ async def test_migrate_refuses_future_version(
     assert result is False
     assert entry.version == future_version
     assert entry.data["embedding_engine"] == "ollama"
+
+
+def test_move_legacy_db(tmp_path, monkeypatch):
+    """A DB created in the old CWD-relative location is moved into the config dir."""
+    from custom_components.ai_memory import _move_legacy_db
+
+    cwd = tmp_path / "cwd"
+    config = tmp_path / "config"
+    cwd.mkdir()
+    config.mkdir()
+    (cwd / "ai_memory.db").write_text("db")
+    (cwd / "ai_memory.db-wal").write_text("wal")
+    monkeypatch.chdir(cwd)
+
+    target = config / "ai_memory.db"
+    _move_legacy_db(str(target))
+
+    assert target.read_text() == "db"
+    assert (config / "ai_memory.db-wal").read_text() == "wal"
+    assert not (cwd / "ai_memory.db").exists()
+
+    # Never clobber an existing DB in the config dir
+    (cwd / "ai_memory.db").write_text("stale")
+    _move_legacy_db(str(target))
+    assert target.read_text() == "db"
+    assert (cwd / "ai_memory.db").exists()

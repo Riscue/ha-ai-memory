@@ -241,6 +241,15 @@ async def test_init_does_no_io(mock_hass, mock_embedding_engine):
     assert manager._store._conn is None
 
 
+async def test_default_db_path_uses_config_dir(mock_hass, mock_embedding_engine):
+    """Without an explicit path the DB lives in the HA config directory."""
+    mock_hass.config.path.side_effect = lambda *p: "/config/" + "/".join(p)
+    with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
+        manager = MemoryManager(mock_hass)
+    assert manager._db_path == "/config/ai_memory.db"
+
+
 async def test_async_get_palace_stats(memory_manager):
     """Palace stats are available through the manager."""
     stats = await memory_manager.async_get_palace_stats()

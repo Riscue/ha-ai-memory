@@ -29,14 +29,14 @@ class MemoryManager:
         hass: HomeAssistant,
         engine_type: str = "tfidf",
         max_entries: int = MEMORY_MAX_ENTRIES,
-        db_path: str = DEFAULT_STORAGE_PATH,
+        db_path: Optional[str] = None,
         config_data: dict = None,
     ):
         """Create the manager. No I/O happens here; call async_initialize()."""
         self.hass = hass
         self._max_entries = max_entries
         self._config_data = config_data or {}
-        self._db_path = db_path
+        self._db_path = db_path or hass.config.path(DEFAULT_STORAGE_PATH)
 
         self._store = MemoryStore(self._db_path)
         self._palace = PalaceStructure(self._store)

@@ -1,5 +1,7 @@
 """AI Memory component."""
 import logging
+import os
+import shutil
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -9,6 +11,7 @@ from homeassistant.helpers import config_validation as cv
 
 from . import memory_llm_api
 from .constants import (
+    DEFAULT_STORAGE_PATH,
     DOMAIN,
     MEMORY_MAX_ENTRIES,
     PROVIDER_NAMES,
@@ -81,6 +84,23 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _move_legacy_db(db_path: str) -> None:
+    """Move a database created relative to the working directory into place.
+
+    Older versions opened "ai_memory.db" relative to the process CWD, which
+    is not necessarily the HA config directory.
+    """
+    legacy_path = os.path.abspath(DEFAULT_STORAGE_PATH)
+    if legacy_path == os.path.abspath(db_path) or os.path.exists(db_path):
+        return
+    if not os.path.exists(legacy_path):
+        return
+    for suffix in ("", "-wal", "-shm"):
+        if os.path.exists(legacy_path + suffix):
+            shutil.move(legacy_path + suffix, db_path + suffix)
+    _LOGGER.info("Moved AI Memory database from %s to %s", legacy_path, db_path)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up AI Memory from a config entry."""
     if DOMAIN not in hass.data:
@@ -95,7 +115,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     engine_type = resolve_engine_type(entry.data.get("embedding_engine"))
     max_entries = entry.data.get("max_entries", MEMORY_MAX_ENTRIES)
 
-    manager = MemoryManager(hass, engine_type, max_entries, config_data=entry.data)
+    db_path = hass.config.path(DEFAULT_STORAGE_PATH)
+    await hass.async_add_executor_job(_move_legacy_db, db_path)
+
+    manager = MemoryManager(
+        hass, engine_type, max_entries, db_path=db_path, config_data=entry.data
+    )
 
     # Initialize database and embedding engine
     await manager.async_initialize()
