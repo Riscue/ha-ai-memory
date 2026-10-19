@@ -14,6 +14,9 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=15)
 
+# Config entry keys safe to expose as attributes (never api_key)
+EXPOSED_CONFIG_KEYS = ("embedding_engine", "remote_url", "model_name", "max_entries")
+
 
 async def async_setup_entry(
         hass: HomeAssistant,
@@ -70,9 +73,9 @@ class AIMemorySensor(SensorEntity):
             "palace_structure": self._palace_stats,
         }
 
-        # Add config data
-        if self.entry.data:
-            attrs.update(self.entry.data)
+        for key in EXPOSED_CONFIG_KEYS:
+            if key in self.entry.data:
+                attrs[key] = self.entry.data[key]
 
         return attrs
 

@@ -2,6 +2,7 @@
 from unittest.mock import MagicMock, AsyncMock
 
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ai_memory.constants import DOMAIN
 from custom_components.ai_memory.sensor import AIMemorySensor, async_setup_entry as sensor_setup
@@ -63,3 +64,28 @@ async def test_sensor_update_event(hass: HomeAssistant, mock_config_entry):
     await sensor._handle_memory_update({})
 
     sensor.async_schedule_update_ha_state.assert_called_once_with(force_refresh=True)
+
+
+async def test_sensor_hides_api_key(hass: HomeAssistant):
+    """Secrets in the config entry must never become state attributes."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "embedding_engine": "openai_compatible",
+            "remote_url": "http://llm:8080",
+            "model_name": "bge-m3",
+            "api_key": "sk-secret",
+            "max_entries": 500,
+        },
+    )
+    mock_manager = MagicMock()
+    mock_manager._max_entries = 500
+    mock_manager._embedding_engine.engine_name = "remote"
+
+    attrs = AIMemorySensor(hass, entry, mock_manager).extra_state_attributes
+
+    assert "api_key" not in attrs
+    assert "sk-secret" not in str(attrs)
+    assert attrs["embedding_engine"] == "openai_compatible"
+    assert attrs["remote_url"] == "http://llm:8080"
+    assert attrs["model_name"] == "bge-m3"
