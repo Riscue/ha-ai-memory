@@ -44,6 +44,7 @@ def memory_manager(mock_hass, mock_embedding_engine):
     with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
         mock_engine_cls.return_value = mock_embedding_engine
         manager = MemoryManager(mock_hass, db_path=":memory:")
+        manager.initialize_store()
         return manager
 
 
@@ -230,3 +231,18 @@ async def test_async_initialize_failure(mock_hass, mock_embedding_engine):
 
         with pytest.raises(RuntimeError, match="Remote embedding service is not reachable"):
             await manager.async_initialize()
+
+
+async def test_init_does_no_io(mock_hass, mock_embedding_engine):
+    """Constructing the manager must not touch the database (event loop safety)."""
+    with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
+        manager = MemoryManager(mock_hass, db_path=":memory:")
+    assert manager._store._conn is None
+
+
+async def test_async_get_palace_stats(memory_manager):
+    """Palace stats are available through the manager."""
+    stats = await memory_manager.async_get_palace_stats()
+    assert stats["wings"] > 0
+    assert stats["rooms"] > 0

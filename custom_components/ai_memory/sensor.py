@@ -85,9 +85,8 @@ class AIMemorySensor(SensorEntity):
         self._layer_counts = await self.memory_manager.async_get_layer_counts()
         self._wing_counts = await self.memory_manager.async_get_wing_counts()
 
-        # Get palace stats
         try:
-            self._palace_stats = self.memory_manager._palace.get_stats()
+            self._palace_stats = await self.memory_manager.async_get_palace_stats()
         except Exception:
             self._palace_stats = {"wings": 0, "rooms": 0}
 

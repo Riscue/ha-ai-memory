@@ -32,18 +32,14 @@ class MemoryManager:
         db_path: str = DEFAULT_STORAGE_PATH,
         config_data: dict = None,
     ):
+        """Create the manager. No I/O happens here; call async_initialize()."""
         self.hass = hass
         self._max_entries = max_entries
         self._config_data = config_data or {}
         self._db_path = db_path
 
-        # Initialize store and run migrations
-        self._store = MemoryStore(db_path)
-        MigrationManager(self._store).migrate()
-
-        # Initialize palace structure and room detector
+        self._store = MemoryStore(self._db_path)
         self._palace = PalaceStructure(self._store)
-        self._palace.initialize_defaults()
         self._room_detector = RoomDetector(self._store)
 
         # Initialize embedding engine
@@ -52,8 +48,15 @@ class MemoryManager:
         # Initialize search engine
         self._search = MemorySearch(self._store, self._embedding_engine)
 
+    def initialize_store(self):
+        """Run migrations and seed palace defaults (blocking, run in executor)."""
+        MigrationManager(self._store).migrate()
+        self._palace.initialize_defaults()
+
     async def async_initialize(self):
-        """Initialize the memory manager and embedding engine."""
+        """Initialize the database and embedding engine."""
+        await self.hass.async_add_executor_job(self.initialize_store)
+
         if self._embedding_engine:
             await self._embedding_engine.async_initialize()
 
@@ -67,6 +70,10 @@ class MemoryManager:
                 else:
                     _LOGGER.error("Remote embedding service is NOT reachable at startup.")
                     raise RuntimeError("Remote embedding service is not reachable")
+
+    async def async_get_palace_stats(self) -> Dict[str, int]:
+        """Get palace structure statistics."""
+        return await self.hass.async_add_executor_job(self._palace.get_stats)
 
     async def async_get_memory_counts(self) -> Dict[str, int]:
         """Get counts of memories by scope."""
@@ -209,7 +216,9 @@ class MemoryManager:
 
         # Determine wing/room (auto-detect if not provided)
         if not wing or not room:
-            detected_wing, detected_room = self._room_detector.detect(content, scope)
+            detected_wing, detected_room = await self.hass.async_add_executor_job(
+                self._room_detector.detect, content, scope
+            )
             wing = wing or detected_wing
             room = room or detected_room
 

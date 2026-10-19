@@ -44,6 +44,7 @@ class TestMemoryBenchmark:
         _LOGGER.info("\n--- HA-AI-MEMORY PYTEST BENCHMARK START ---")
 
         manager = MemoryManager(hass, ENGINE_REMOTE)
+        await manager.async_initialize()
 
         _LOGGER.info(f"\n1. Injecting {len(MEMORIES)} memories into virtual DB...")
         for text, scope in MEMORIES:

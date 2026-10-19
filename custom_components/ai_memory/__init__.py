@@ -97,7 +97,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     manager = MemoryManager(hass, engine_type, max_entries, config_data=entry.data)
 
-    # Initialize embedding engine
+    # Initialize database and embedding engine
     await manager.async_initialize()
 
     hass.data[DOMAIN]["manager"] = manager

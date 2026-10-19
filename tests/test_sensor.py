@@ -19,8 +19,7 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     mock_manager.async_get_memory_counts = AsyncMock(return_value={"total": 10})
     mock_manager.async_get_layer_counts = AsyncMock(return_value={"L1": 2, "L2": 8})
     mock_manager.async_get_wing_counts = AsyncMock(return_value={"household": 5, "personal": 5})
-    mock_manager._palace = MagicMock()
-    mock_manager._palace.get_stats.return_value = {"wings": 3, "rooms": 8}
+    mock_manager.async_get_palace_stats = AsyncMock(return_value={"wings": 3, "rooms": 8})
 
     hass.data[DOMAIN] = {"manager": mock_manager}
 
