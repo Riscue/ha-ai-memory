@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from custom_components.ai_memory import (
     async_setup,
@@ -42,6 +43,24 @@ async def test_setup_entry_creates_single_manager(hass: HomeAssistant, mock_conf
         # Verify single manager created and stored
         assert "manager" in hass.data[DOMAIN]
         assert hass.data[DOMAIN]["manager"] == mock_instance
+
+
+async def test_setup_entry_not_ready_closes_manager(hass: HomeAssistant, mock_config_entry):
+    """An unreachable remote service retries setup and doesn't leak the DB connection."""
+    mock_config_entry.add_to_hass(hass)
+
+    import custom_components.ai_memory
+    with patch.object(custom_components.ai_memory, "MemoryManager") as mock_manager_cls:
+        mock_instance = mock_manager_cls.return_value
+        mock_instance.async_initialize = AsyncMock(
+            side_effect=ConfigEntryNotReady("Remote embedding service is not reachable")
+        )
+
+        with pytest.raises(ConfigEntryNotReady):
+            await async_setup_entry(hass, mock_config_entry)
+
+        mock_instance.close.assert_called_once()
+        assert "manager" not in hass.data.get(DOMAIN, {})
 
 
 async def test_setup_entry_already_initialized(hass: HomeAssistant, mock_config_entry):

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import numpy as np
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from custom_components.ai_memory.embedding.tfidf import TFIDFEmbeddingEngine
 from custom_components.ai_memory.memory.manager import MemoryManager
@@ -230,7 +231,7 @@ async def test_async_initialize_failure(mock_hass, mock_embedding_engine):
         manager = MemoryManager(mock_hass, db_path=":memory:")
         manager._embedding_engine = mock_embedding_engine
 
-        with pytest.raises(RuntimeError, match="Remote embedding service is not reachable"):
+        with pytest.raises(ConfigEntryNotReady, match="Remote embedding service is not reachable"):
             await manager.async_initialize()
 
 

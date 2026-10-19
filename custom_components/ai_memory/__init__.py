@@ -123,7 +123,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
 
     # Initialize database and embedding engine
-    await manager.async_initialize()
+    try:
+        await manager.async_initialize()
+    except Exception:
+        await hass.async_add_executor_job(manager.close)
+        raise
 
     hass.data[DOMAIN]["manager"] = manager
     _LOGGER.debug("Initialized Single Memory Manager")

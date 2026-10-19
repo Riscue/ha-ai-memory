@@ -287,9 +287,11 @@ Use it in templates, dashboards, or to trigger automations when memory changes.
 
 ## 🐛 Troubleshooting
 
-- **Setup fails with `"Remote embedding service is not reachable"`** — the manager probes
-  `/api/version` (Ollama) or `/v1/models` (OpenAI-compatible) during startup. Make sure the server
-  is running at the URL you configured, or switch the provider to `tfidf` (no probe, always works).
+- **Integration stuck in "Retrying setup" with `"Remote embedding service is not reachable"`** —
+  the manager probes `/api/version` (Ollama) or `/v1/models` (OpenAI-compatible) during startup.
+  Home Assistant keeps retrying automatically, so it recovers on its own once the server is up.
+  If it never does, make sure the server is running at the URL you configured, or switch the
+  provider to `tfidf` (no probe, always works).
 - **`"Embedding engine '…' failed to initialize. Please check logs."`** — the configured engine
   could not be created. There is no automatic switch to another engine, because embeddings from
   different engines can't be compared. Check the HA log for the underlying cause; usually a

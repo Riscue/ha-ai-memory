@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .migration import MigrationManager
 from .search import MemorySearch
@@ -107,8 +108,8 @@ class MemoryManager:
                     if hasattr(self._embedding_engine._engine, "async_load_model"):
                         await self._embedding_engine._engine.async_load_model()
                 else:
-                    _LOGGER.error("Remote embedding service is NOT reachable at startup.")
-                    raise RuntimeError("Remote embedding service is not reachable")
+                    # HA retries setup with backoff until the service comes up
+                    raise ConfigEntryNotReady("Remote embedding service is not reachable")
 
             if self._engine_type == ENGINE_TFIDF:
                 count = await self.hass.async_add_executor_job(
