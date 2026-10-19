@@ -1,4 +1,5 @@
 """TF-IDF based embedding engine for AI Memory (stdlib only, no dependencies)."""
+import hashlib
 import json
 import logging
 import math
@@ -96,8 +97,13 @@ class TFIDFEmbeddingEngine:
         return idf
 
     def _hash_term_to_index(self, term: str) -> int:
-        """Hash a term to a vector index."""
-        return hash(term) % self.vector_dim
+        """Hash a term to a vector index.
+
+        Uses MD5 rather than hash(), which is randomized per process and would
+        make stored vectors incomparable after a restart.
+        """
+        digest = hashlib.md5(term.encode("utf-8"), usedforsecurity=False).digest()
+        return int.from_bytes(digest[:8], "big") % self.vector_dim
 
     def _create_vector(self, tf_idf: Dict[str, float]) -> List[float]:
         """Create a fixed-dimension vector from TF-IDF scores."""

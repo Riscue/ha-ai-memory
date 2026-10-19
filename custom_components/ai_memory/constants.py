@@ -55,6 +55,10 @@ def resolve_flavor(provider: str) -> str:
 # Default storage path (resolved with hass.config.path)
 DEFAULT_STORAGE_PATH = "ai_memory.db"
 
+# _meta marker recording which hash built the stored TF-IDF vectors
+META_TFIDF_HASH = "tfidf_hash"
+TFIDF_HASH_VERSION = "md5"
+
 # Palace defaults
 DEFAULT_WING = "general"
 DEFAULT_ROOM = "general"

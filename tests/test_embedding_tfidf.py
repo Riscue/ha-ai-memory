@@ -99,6 +99,14 @@ class TestTFIDFEmbeddingEngine:
         # Index should be within bounds
         assert 0 <= idx1 < 384
 
+    def test_term_hashing_is_pinned(self, mock_hass):
+        """Indices must not depend on PYTHONHASHSEED, or stored vectors break on restart."""
+        engine = TFIDFEmbeddingEngine(mock_hass, vector_dim=384)
+
+        assert engine._hash_term_to_index("test") == 371
+        assert engine._hash_term_to_index("lamba") == 188
+        assert engine._hash_term_to_index("ışık") == 223
+
     def test_vector_creation(self, mock_hass):
         """Test vector creation and normalization."""
         engine = TFIDFEmbeddingEngine(mock_hass, vector_dim=384)

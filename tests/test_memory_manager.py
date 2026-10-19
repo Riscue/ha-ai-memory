@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.ai_memory.embedding.tfidf import TFIDFEmbeddingEngine
 from custom_components.ai_memory.memory.manager import MemoryManager
 from custom_components.ai_memory.memory.store import MemoryStore
 from custom_components.ai_memory.memory.search import MemorySearch
@@ -255,3 +256,46 @@ async def test_async_get_palace_stats(memory_manager):
     stats = await memory_manager.async_get_palace_stats()
     assert stats["wings"] > 0
     assert stats["rooms"] > 0
+
+
+async def test_tfidf_reembeds_legacy_vectors_once(mock_hass):
+    """Vectors from the old randomized hash are rebuilt on TF-IDF startup."""
+    manager = MemoryManager(mock_hass, engine_type="tfidf", db_path=":memory:")
+    with patch.object(TFIDFEmbeddingEngine, "_load_vocabulary"):
+        await manager.async_initialize()
+
+    stale = json.dumps([0.0] * 10)
+    manager._store.execute_commit(
+        "INSERT INTO memories (id, content, embedding, scope) VALUES (?, ?, ?, ?)",
+        ("m1", "living room lamp", stale, "common"),
+    )
+    manager._store.execute_commit("DELETE FROM _meta WHERE key = 'tfidf_hash'")
+
+    assert await mock_hass.async_add_executor_job(manager._reembed_tfidf_if_needed) == 1
+    embedding = json.loads(
+        manager._store.execute_query("SELECT embedding FROM memories")[0][0]
+    )
+    assert embedding == manager._embedding_engine._engine.generate_embedding("living room lamp")
+    assert manager._store.get_embedding_dim() == 384
+
+    # Marker is set, so a second run is a no-op
+    assert manager._reembed_tfidf_if_needed() == 0
+
+
+async def test_remote_engine_clears_tfidf_marker(mock_hass, mock_embedding_engine):
+    """Running a non-TF-IDF engine forgets the marker so TF-IDF re-embeds later."""
+    mock_embedding_engine.async_initialize = AsyncMock()
+    mock_embedding_engine._engine = MagicMock(spec=[])
+    with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
+        manager = MemoryManager(mock_hass, engine_type="remote", db_path=":memory:")
+    manager.initialize_store()
+    manager._store.execute_commit(
+        "INSERT INTO _meta (key, value) VALUES ('tfidf_hash', 'md5')"
+    )
+
+    await manager.async_initialize()
+
+    assert manager._store.execute_query(
+        "SELECT value FROM _meta WHERE key = 'tfidf_hash'"
+    ) == []

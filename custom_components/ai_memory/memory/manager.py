@@ -13,6 +13,9 @@ from ..constants import (
     MEMORY_MAX_ENTRIES,
     DEFAULT_STORAGE_PATH,
     DEFAULT_LAYER,
+    ENGINE_TFIDF,
+    META_TFIDF_HASH,
+    TFIDF_HASH_VERSION,
 )
 from ..embedding.engine import EmbeddingEngine
 from ..palace.metadata import RoomDetector
@@ -36,6 +39,7 @@ class MemoryManager:
         self.hass = hass
         self._max_entries = max_entries
         self._config_data = config_data or {}
+        self._engine_type = engine_type
         self._db_path = db_path or hass.config.path(DEFAULT_STORAGE_PATH)
 
         self._store = MemoryStore(self._db_path)
@@ -52,6 +56,41 @@ class MemoryManager:
         """Run migrations and seed palace defaults (blocking, run in executor)."""
         MigrationManager(self._store).migrate()
         self._palace.initialize_defaults()
+
+    def _reembed_tfidf_if_needed(self) -> int:
+        """Re-embed all memories if they predate the stable TF-IDF hash (blocking).
+
+        TF-IDF vectors used to be built with Python's per-process randomized
+        hash(), so vectors stored before a restart never match new queries.
+        """
+        rows = self._store.execute_query(
+            "SELECT value FROM _meta WHERE key = ?", (META_TFIDF_HASH,)
+        )
+        if rows and rows[0][0] == TFIDF_HASH_VERSION:
+            return 0
+
+        engine = self._embedding_engine._engine
+        rows = self._store.execute_query("SELECT id, content, summary FROM memories")
+        updates = []
+        for mem_id, content, summary in rows:
+            embedding = engine.generate_embedding(summary or content or "")
+            updates.append((self._store.validate_embedding(embedding), mem_id))
+
+        self._store.execute_commit_many(
+            "UPDATE memories SET embedding = ? WHERE id = ?", updates
+        )
+        self._store.set_embedding_dim(engine.vector_dim)
+        self._store.execute_commit(
+            "INSERT OR REPLACE INTO _meta (key, value) VALUES (?, ?)",
+            (META_TFIDF_HASH, TFIDF_HASH_VERSION),
+        )
+        return len(updates)
+
+    def _clear_tfidf_marker(self):
+        """Forget the TF-IDF marker so switching back to TF-IDF re-embeds (blocking)."""
+        self._store.execute_commit(
+            "DELETE FROM _meta WHERE key = ?", (META_TFIDF_HASH,)
+        )
 
     async def async_initialize(self):
         """Initialize the database and embedding engine."""
@@ -70,6 +109,18 @@ class MemoryManager:
                 else:
                     _LOGGER.error("Remote embedding service is NOT reachable at startup.")
                     raise RuntimeError("Remote embedding service is not reachable")
+
+            # Only touch stored vectors when TF-IDF is the configured engine, so a
+            # transient fallback doesn't overwrite a remote model's embeddings.
+            if self._engine_type == ENGINE_TFIDF:
+                if self._embedding_engine.engine_name == ENGINE_TFIDF:
+                    count = await self.hass.async_add_executor_job(
+                        self._reembed_tfidf_if_needed
+                    )
+                    if count:
+                        _LOGGER.info("Re-embedded %d memories with stable TF-IDF hashing", count)
+            else:
+                await self.hass.async_add_executor_job(self._clear_tfidf_marker)
 
     async def async_get_palace_stats(self) -> Dict[str, int]:
         """Get palace structure statistics."""
