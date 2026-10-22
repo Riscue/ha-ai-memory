@@ -144,7 +144,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Register services
     _register_services(hass)
 
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    # The options flow reloads the entry itself: an update listener would
+    # double-reload, and is never registered while setup is retrying.
     return True
 
 
@@ -239,11 +240,6 @@ def _register_services(hass: HomeAssistant):
                                  supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_MEMORY, handle_delete_memory, schema=DELETE_MEMORY_SCHEMA,
                                  supports_response=SupportsResponse.OPTIONAL)
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Reload config entry."""
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):

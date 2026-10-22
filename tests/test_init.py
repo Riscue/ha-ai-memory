@@ -10,7 +10,6 @@ from custom_components.ai_memory import (
     async_setup,
     async_setup_entry,
     async_unload_entry,
-    async_reload_entry,
 )
 from custom_components.ai_memory.constants import DOMAIN
 
@@ -122,13 +121,6 @@ async def test_unload_entry_failure(hass: HomeAssistant, mock_config_entry):
 
         # Manager should still exist
         assert "manager" in hass.data[DOMAIN]
-
-
-async def test_reload_entry(hass: HomeAssistant, mock_config_entry):
-    """Test reload entry."""
-    with patch("homeassistant.config_entries.ConfigEntries.async_reload", new_callable=AsyncMock) as mock_reload:
-        await async_reload_entry(hass, mock_config_entry)
-        mock_reload.assert_called_once_with(mock_config_entry.entry_id)
 
 
 async def _setup_entry(hass: HomeAssistant, data: dict, version: int):
