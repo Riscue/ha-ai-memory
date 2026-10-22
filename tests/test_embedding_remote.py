@@ -1,9 +1,20 @@
 """Tests for Remote embedding engine."""
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, MagicMock, patch, AsyncMock
 
 import pytest
 
 from custom_components.ai_memory.embedding.remote import RemoteEmbeddingEngine
+
+
+def _response(status, text=""):
+    """Build an async context manager yielding a response with the given status."""
+    response = AsyncMock()
+    response.status = status
+    response.text.return_value = text
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=response)
+    context.__aexit__ = AsyncMock(return_value=False)
+    return context
 
 
 class TestRemoteEmbeddingEngine:
@@ -14,6 +25,16 @@ class TestRemoteEmbeddingEngine:
         """Mock Home Assistant."""
         hass = Mock()
         return hass
+
+    @pytest.fixture(autouse=True)
+    def mock_session(self):
+        """Stand in for HA's shared aiohttp session."""
+        session = MagicMock()
+        with patch(
+            "custom_components.ai_memory.embedding.remote.async_get_clientsession",
+            return_value=session,
+        ):
+            yield session
 
     @pytest.fixture
     def config_data(self):
@@ -62,39 +83,44 @@ class TestRemoteEmbeddingEngine:
             )
 
     @pytest.mark.asyncio
-    async def test_async_get_version_success(self, mock_hass):
+    async def test_async_get_version_success(self, mock_hass, mock_session):
         engine = RemoteEmbeddingEngine(mock_hass, {"remote_url": "http://localhost:11434"})
-        with patch("aiohttp.ClientSession.get") as mock_get:
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_get.return_value.__aenter__.return_value = mock_response
+        mock_session.get.return_value = _response(200)
 
-            assert await engine.async_get_version() is True
+        assert await engine.async_get_version() is True
 
     @pytest.mark.asyncio
-    async def test_async_get_version_failure(self, mock_hass):
+    async def test_async_get_version_failure(self, mock_hass, mock_session):
         engine = RemoteEmbeddingEngine(mock_hass, {"remote_url": "http://localhost:11434"})
-        with patch("aiohttp.ClientSession.get") as mock_get:
-            mock_get.side_effect = Exception("Connection failed")
-            assert await engine.async_get_version() is False
+        mock_session.get.side_effect = Exception("Connection failed")
+        assert await engine.async_get_version() is False
 
     @pytest.mark.asyncio
-    async def test_async_load_model_success(self, mock_hass, config_data):
-        """Test successful model loading."""
+    async def test_async_load_model_already_available(
+            self, mock_hass, config_data, mock_session):
+        """A model the server already has is not pulled again."""
         engine = RemoteEmbeddingEngine(mock_hass, config_data)
+        mock_session.post.return_value = _response(200)
 
-        with patch("aiohttp.ClientSession.post") as mock_post:
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_post.return_value.__aenter__.return_value = mock_response
+        await engine.async_load_model()
 
-            await engine.async_load_model()
+        assert engine._model_loaded is True
+        mock_session.post.assert_called_once()
+        assert mock_session.post.call_args[0][0] == "http://test-server:8000/api/show"
 
-            assert engine._model_loaded is True
-            mock_post.assert_called_with(
-                "http://test-server:8000/api/pull",
-                json={"name": "test-model"}
-            )
+    @pytest.mark.asyncio
+    async def test_async_load_model_pulls_missing(
+            self, mock_hass, config_data, mock_session):
+        """A missing model is pulled without streaming, so the pull completes."""
+        engine = RemoteEmbeddingEngine(mock_hass, config_data)
+        mock_session.post.side_effect = [_response(404), _response(200)]
+
+        await engine.async_load_model()
+
+        assert engine._model_loaded is True
+        pull_call = mock_session.post.call_args_list[1]
+        assert pull_call[0][0] == "http://test-server:8000/api/pull"
+        assert pull_call[1]["json"] == {"name": "test-model", "stream": False}
 
     def test_generate_embedding_sync_success(self, mock_hass, config_data):
         """Test successful sync embedding generation."""
@@ -118,28 +144,26 @@ class TestRemoteEmbeddingEngine:
             )
 
     @pytest.mark.asyncio
-    async def test_async_load_model_failure(self, mock_hass, config_data):
+    async def test_async_load_model_failure(self, mock_hass, config_data, mock_session):
         """Test model loading failure."""
         engine = RemoteEmbeddingEngine(mock_hass, config_data)
+        mock_session.post.side_effect = [
+            _response(404),
+            _response(500, "Internal Server Error"),
+        ]
 
-        with patch("aiohttp.ClientSession.post") as mock_post:
-            mock_response = AsyncMock()
-            mock_response.status = 500
-            mock_response.text.return_value = "Internal Server Error"
-            mock_post.return_value.__aenter__.return_value = mock_response
+        await engine.async_load_model()
 
-            await engine.async_load_model()
-
-            assert engine._model_loaded is False
+        assert engine._model_loaded is False
 
     @pytest.mark.asyncio
-    async def test_async_load_model_exception(self, mock_hass, config_data):
+    async def test_async_load_model_exception(self, mock_hass, config_data, mock_session):
         """Test model loading exception."""
         engine = RemoteEmbeddingEngine(mock_hass, config_data)
+        mock_session.post.side_effect = Exception("Connection failed")
 
-        with patch("aiohttp.ClientSession.post", side_effect=Exception("Connection failed")):
-            await engine.async_load_model()
-            assert engine._model_loaded is False
+        await engine.async_load_model()
+        assert engine._model_loaded is False
 
     def test_generate_embedding_sync_failure(self, mock_hass, config_data):
         """Test sync embedding generation failure."""
@@ -223,26 +247,27 @@ class TestRemoteEmbeddingEngine:
 
     @pytest.mark.asyncio
     async def test_openai_get_version_uses_v1_models(
-            self, mock_hass, openai_config_data):
+            self, mock_hass, openai_config_data, mock_session):
         """OpenAI flavor health check hits /v1/models with auth."""
         engine = RemoteEmbeddingEngine(mock_hass, openai_config_data)
-        with patch("aiohttp.ClientSession.get") as mock_get:
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_get.return_value.__aenter__.return_value = mock_response
+        mock_session.get.return_value = _response(200)
 
-            assert await engine.async_get_version() is True
-            assert "v1/models" in mock_get.call_args[0][0]
+        assert await engine.async_get_version() is True
+        assert "v1/models" in mock_session.get.call_args[0][0]
+        assert mock_session.get.call_args[1]["headers"] == {
+            "Authorization": "Bearer secret-key"
+        }
 
     @pytest.mark.asyncio
-    async def test_openai_load_model_noop(self, mock_hass, openai_config_data):
+    async def test_openai_load_model_noop(
+            self, mock_hass, openai_config_data, mock_session):
         """Pull is skipped for OpenAI-compatible servers."""
         engine = RemoteEmbeddingEngine(mock_hass, openai_config_data)
-        with patch("aiohttp.ClientSession.post") as mock_post:
-            await engine.async_load_model()
 
-            mock_post.assert_not_called()
-            assert engine._model_loaded is True
+        await engine.async_load_model()
+
+        mock_session.post.assert_not_called()
+        assert engine._model_loaded is True
 
     def test_legacy_remote_normalizes_to_ollama(self, mock_hass, config_data):
         """Legacy embedding_engine="remote" behaves as the Ollama flavor."""

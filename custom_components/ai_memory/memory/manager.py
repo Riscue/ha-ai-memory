@@ -1,10 +1,11 @@
 """Memory Manager for AI Memory integration (refactored)."""
+import asyncio
 import logging
 import uuid
 from datetime import datetime
 from typing import List, Dict, Optional
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .migration import MigrationManager
@@ -52,6 +53,8 @@ class MemoryManager:
 
         # Initialize search engine
         self._search = MemorySearch(self._store, self._embedding_engine)
+
+        self._model_task: Optional[asyncio.Task] = None
 
     def initialize_store(self):
         """Run migrations and seed palace defaults (blocking, run in executor)."""
@@ -106,7 +109,12 @@ class MemoryManager:
                 if is_ready:
                     _LOGGER.info("Remote embedding service is reachable.")
                     if hasattr(self._embedding_engine._engine, "async_load_model"):
-                        await self._embedding_engine._engine.async_load_model()
+                        # A missing model can take minutes to pull; don't
+                        # hold up Home Assistant startup for it.
+                        self._model_task = self.hass.async_create_background_task(
+                            self._embedding_engine._engine.async_load_model(),
+                            "ai_memory_load_model",
+                        )
                 else:
                     # HA retries setup with backoff until the service comes up
                     raise ConfigEntryNotReady("Remote embedding service is not reachable")
@@ -440,6 +448,13 @@ class MemoryManager:
         except Exception as e:
             _LOGGER.error("Failed to delete memory: %s", e)
             return 0
+
+    @callback
+    def async_cancel_tasks(self):
+        """Cancel the background model pull, if still running."""
+        if self._model_task and not self._model_task.done():
+            self._model_task.cancel()
+        self._model_task = None
 
     def close(self):
         """Close database connection and release resources."""

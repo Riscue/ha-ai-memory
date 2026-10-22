@@ -235,6 +235,29 @@ async def test_async_initialize_failure(mock_hass, mock_embedding_engine):
             await manager.async_initialize()
 
 
+async def test_async_initialize_loads_model_in_background(mock_hass, mock_embedding_engine):
+    """Setup doesn't wait for a model pull; unload can cancel it."""
+    mock_embedding_engine.async_initialize = AsyncMock()
+    mock_embedding_engine._engine = MagicMock()
+    mock_embedding_engine._engine.async_get_version = AsyncMock(return_value=True)
+    mock_embedding_engine._engine.async_load_model = MagicMock()
+    task = MagicMock()
+    task.done.return_value = False
+    mock_hass.async_create_background_task = MagicMock(return_value=task)
+
+    with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:
+        mock_engine_cls.return_value = mock_embedding_engine
+        manager = MemoryManager(mock_hass, engine_type="remote", db_path=":memory:")
+
+    await manager.async_initialize()
+
+    mock_hass.async_create_background_task.assert_called_once()
+    assert mock_hass.async_create_background_task.call_args[0][1] == "ai_memory_load_model"
+
+    manager.async_cancel_tasks()
+    task.cancel.assert_called_once()
+
+
 async def test_init_does_no_io(mock_hass, mock_embedding_engine):
     """Constructing the manager must not touch the database (event loop safety)."""
     with patch("custom_components.ai_memory.memory.manager.EmbeddingEngine") as mock_engine_cls:

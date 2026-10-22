@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 import aiohttp
 import requests
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..constants import (
     API_FLAVOR_OPENAI,
@@ -53,15 +54,19 @@ class RemoteEmbeddingEngine:
         if headers:
             kwargs["headers"] = headers
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, **kwargs) as response:
-                    return response.status == 200
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, **kwargs) as response:
+                return response.status == 200
         except Exception:
             return False
 
     async def async_load_model(self):
-        """Async load model (pull). No-op for OpenAI-compatible servers,
-        which load the model at startup."""
+        """Make sure the model is available, pulling it if missing.
+
+        No-op for OpenAI-compatible servers, which load the model at startup.
+        The pull uses stream=False so Ollama answers only once it finished;
+        a streamed pull is cancelled as soon as the connection closes.
+        """
         if self._is_openai():
             _LOGGER.debug(
                 "Skipping model pull for OpenAI-compatible endpoint (%s)",
@@ -70,19 +75,32 @@ class RemoteEmbeddingEngine:
             self._model_loaded = True
             return
 
-        url = f"{self.remote_url}/api/pull"
-        kwargs = {"json": {"name": self.model_name}}
         headers = self._headers()
-        if headers:
-            kwargs["headers"] = headers
+        session = async_get_clientsession(self.hass)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, **kwargs) as response:
-                    if response.status == 200:
-                        _LOGGER.info("Remote model %s loaded/ready", self.model_name)
-                        self._model_loaded = True
-                    else:
-                        _LOGGER.error("Failed to load remote model: %s", await response.text())
+            async with session.post(
+                f"{self.remote_url}/api/show",
+                json={"model": self.model_name},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status == 200:
+                    _LOGGER.debug("Remote model %s is available", self.model_name)
+                    self._model_loaded = True
+                    return
+
+            _LOGGER.info("Pulling remote model %s", self.model_name)
+            async with session.post(
+                f"{self.remote_url}/api/pull",
+                json={"name": self.model_name, "stream": False},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=None),
+            ) as response:
+                if response.status == 200:
+                    _LOGGER.info("Remote model %s loaded/ready", self.model_name)
+                    self._model_loaded = True
+                else:
+                    _LOGGER.error("Failed to load remote model: %s", await response.text())
         except Exception as e:
             _LOGGER.error("Failed to connect to remote service during pull: %s", e)
             self._model_loaded = False

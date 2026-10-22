@@ -58,6 +58,7 @@ async def test_setup_entry_not_ready_closes_manager(hass: HomeAssistant, mock_co
         with pytest.raises(ConfigEntryNotReady):
             await async_setup_entry(hass, mock_config_entry)
 
+        mock_instance.async_cancel_tasks.assert_called_once()
         mock_instance.close.assert_called_once()
         assert "manager" not in hass.data.get(DOMAIN, {})
 
@@ -85,8 +86,9 @@ async def test_unload_entry(hass: HomeAssistant, mock_config_entry):
     with patch("homeassistant.config_entries.ConfigEntries.async_unload_platforms", return_value=True):
         assert await async_unload_entry(hass, mock_config_entry)
 
-        # Manager should be removed and its DB connection closed
+        # Manager should be removed, its model pull cancelled and DB closed
         assert "manager" not in hass.data[DOMAIN]
+        manager.async_cancel_tasks.assert_called_once()
         manager.close.assert_called_once()
 
 

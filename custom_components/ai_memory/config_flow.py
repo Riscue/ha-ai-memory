@@ -6,8 +6,9 @@ from typing import Dict, Any, List, Optional
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -17,11 +18,11 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from . import MEMORY_MAX_ENTRIES
 from .constants import (
     DEFAULT_MODEL,
     DEFAULT_REMOTE_URL,
     DOMAIN,
+    MEMORY_MAX_ENTRIES,
     PROVIDER_NAMES,
     PROVIDER_OLLAMA,
     PROVIDER_OPENAI,
@@ -76,7 +77,7 @@ def _auth_headers(api_key: Optional[str]) -> Optional[Dict[str, str]]:
 
 
 async def _fetch_models(
-    remote_url: str, provider: str, api_key: Optional[str]
+    hass: HomeAssistant, remote_url: str, provider: str, api_key: Optional[str]
 ) -> tuple[Optional[List[str]], Optional[str]]:
     """Fetch available model names.
 
@@ -95,26 +96,32 @@ async def _fetch_models(
         kwargs["headers"] = headers
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, **kwargs) as response:
-                if response.status != 200:
-                    return None, "models_fetch_failed"
-                data = await response.json()
-                if provider == PROVIDER_OPENAI:
-                    names = [m["id"] for m in data.get("data", []) if m.get("id")]
-                else:
-                    names = [m["name"] for m in data.get("models", []) if m.get("name")]
-                return (names or None), (None if names else "models_fetch_failed")
+        session = async_get_clientsession(hass)
+        async with session.get(url, **kwargs) as response:
+            if response.status != 200:
+                return None, "models_fetch_failed"
+            data = await response.json()
+            if provider == PROVIDER_OPENAI:
+                names = [m["id"] for m in data.get("data", []) if m.get("id")]
+            else:
+                names = [m["name"] for m in data.get("models", []) if m.get("name")]
+            return (names or None), (None if names else "models_fetch_failed")
     except (aiohttp.ClientConnectionError, TimeoutError):
         return None, "cannot_connect"
     except Exception:
         return None, "models_fetch_failed"
 
 
-async def _pull_model(remote_url: str, model_name: str, api_key: Optional[str]) -> bool:
-    """Trigger a model pull on an Ollama server. Returns True on success."""
+async def _pull_model(
+    hass: HomeAssistant, remote_url: str, model_name: str, api_key: Optional[str]
+) -> bool:
+    """Pull a model on an Ollama server. Returns True once it is available.
+
+    stream=False makes Ollama answer only after the pull finished; with the
+    default streaming response, closing the connection early cancels it.
+    """
     kwargs: Dict[str, Any] = {
-        "json": {"name": model_name},
+        "json": {"name": model_name, "stream": False},
         "timeout": aiohttp.ClientTimeout(total=300),
     }
     headers = _auth_headers(api_key)
@@ -122,9 +129,9 @@ async def _pull_model(remote_url: str, model_name: str, api_key: Optional[str]) 
         kwargs["headers"] = headers
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{remote_url}/api/pull", **kwargs) as response:
-                return response.status == 200
+        session = async_get_clientsession(hass)
+        async with session.post(f"{remote_url}/api/pull", **kwargs) as response:
+            return response.status == 200
     except Exception:
         return False
 
@@ -219,7 +226,7 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Pull gate applies to Ollama only; OpenAI-compatible servers
             # load the model at startup.
             if provider == PROVIDER_OLLAMA:
-                if await _pull_model(remote_url, model_name, api_key):
+                if await _pull_model(self.hass, remote_url, model_name, api_key):
                     self._user_input[CONF_MODEL_NAME] = model_name
                     return self.async_create_entry(
                         title="AI Memory", data=self._build_entry_data()
@@ -231,7 +238,7 @@ class AiMemoryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title="AI Memory", data=self._build_entry_data()
                 )
 
-        models, fetch_error = await _fetch_models(remote_url, provider, api_key)
+        models, fetch_error = await _fetch_models(self.hass, remote_url, provider, api_key)
         if fetch_error == "cannot_connect":
             # Asking for a model name is pointless until the URL works.
             return await self.async_step_remote_config(
@@ -384,14 +391,14 @@ class AiMemoryOptionsFlow(config_entries.OptionsFlow):
             model_name = user_input[CONF_MODEL_NAME]
 
             if provider == PROVIDER_OLLAMA:
-                if not await _pull_model(remote_url, model_name, api_key):
+                if not await _pull_model(self.hass, remote_url, model_name, api_key):
                     errors["base"] = "pull_failed"
                 else:
                     return await self._finish(model_name)
             else:
                 return await self._finish(model_name)
 
-        models, fetch_error = await _fetch_models(remote_url, provider, api_key)
+        models, fetch_error = await _fetch_models(self.hass, remote_url, provider, api_key)
         if fetch_error == "cannot_connect":
             return await self.async_step_remote_config(
                 connection_error="cannot_connect"

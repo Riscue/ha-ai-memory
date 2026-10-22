@@ -136,6 +136,8 @@ async def test_form_ollama(hass: HomeAssistant) -> None:
     # Pull gate fired exactly once for the selected model
     assert mock_post.call_count == 1
     assert "api/pull" in mock_post.call_args[0][0]
+    # Non-streaming, so a 200 means the pull actually finished
+    assert mock_post.call_args[1]["json"] == {"name": "llama2", "stream": False}
 
 
 async def test_form_openai(hass: HomeAssistant) -> None:

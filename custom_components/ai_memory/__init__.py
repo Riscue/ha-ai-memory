@@ -126,6 +126,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     try:
         await manager.async_initialize()
     except Exception:
+        manager.async_cancel_tasks()
         await hass.async_add_executor_job(manager.close)
         raise
 
@@ -249,6 +250,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     if unload_ok:
         manager = hass.data[DOMAIN].pop("manager", None)
         if manager:
+            manager.async_cancel_tasks()
             await hass.async_add_executor_job(manager.close)
 
         # Remove services
