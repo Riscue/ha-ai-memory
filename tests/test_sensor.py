@@ -5,7 +5,11 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ai_memory.constants import DOMAIN
-from custom_components.ai_memory.sensor import AIMemorySensor, async_setup_entry as sensor_setup
+from custom_components.ai_memory.sensor import (
+    SCAN_INTERVAL,
+    AIMemorySensor,
+    async_setup_entry as sensor_setup,
+)
 
 
 async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
@@ -41,8 +45,8 @@ async def test_sensor_creation(hass: HomeAssistant, mock_config_entry):
     assert sensor.extra_state_attributes["palace_structure"] == {"wings": 3, "rooms": 8}
     assert sensor.extra_state_attributes["max_entries"] == 500
 
-    # Verify scan interval can be set
-    assert sensor._scan_interval.total_seconds() == 900  # 15 min default
+    # Polling is set at platform level (HA ignores per-entity attributes)
+    assert SCAN_INTERVAL.total_seconds() == 900
 
 
 async def test_sensor_update_event(hass: HomeAssistant, mock_config_entry):

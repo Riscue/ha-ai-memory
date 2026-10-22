@@ -12,7 +12,8 @@ from .memory.manager import MemoryManager
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_SCAN_INTERVAL = timedelta(minutes=15)
+# Platform-level poll interval; memory changes also refresh via ai_memory_updated
+SCAN_INTERVAL = timedelta(minutes=15)
 
 # Config entry keys safe to expose as attributes (never api_key)
 EXPOSED_CONFIG_KEYS = ("embedding_engine", "remote_url", "model_name", "max_entries")
@@ -28,10 +29,7 @@ async def async_setup_entry(
         _LOGGER.error("Memory manager not found")
         return
 
-    scan_interval = timedelta(
-        minutes=entry.data.get("scan_interval", 15)
-    )
-    sensor = AIMemorySensor(hass, entry, manager, scan_interval)
+    sensor = AIMemorySensor(hass, entry, manager)
     async_add_entities([sensor], True)
     _LOGGER.debug("Created AI Memory sensor")
 
@@ -42,7 +40,6 @@ class AIMemorySensor(SensorEntity):
             hass: HomeAssistant,
             entry: ConfigEntry,
             memory_manager: MemoryManager,
-            scan_interval: timedelta = DEFAULT_SCAN_INTERVAL,
     ):
         self.hass = hass
         self.entry = entry
@@ -51,7 +48,6 @@ class AIMemorySensor(SensorEntity):
         self._attr_unique_id = "ai_memory_store"
         self._attr_icon = "mdi:brain"
         self._attr_entity_registry_enabled_default = True
-        self._scan_interval = scan_interval
         self._memory_counts = {}
         self._layer_counts = {}
         self._wing_counts = {}
