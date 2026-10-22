@@ -5,7 +5,7 @@ from typing import List, Dict, Optional
 
 import numpy as np
 
-from ..constants import SIMILARITY_THRESHOLD, MEMORY_LIMIT, EMBEDDINGS_VECTOR_DIM
+from ..constants import SIMILARITY_THRESHOLD, MEMORY_LIMIT
 from .store import MemoryStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,20 +23,6 @@ class MemorySearch:
         """
         self._store = store
         self._embedding_engine = embedding_engine
-
-    def _generate_embedding_sync(self, text: str) -> List[float]:
-        """Generate embedding synchronously (called via executor)."""
-        return self._embedding_engine._generate_embedding_sync(text)
-
-    async def async_generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text using the embedding engine."""
-        if not text:
-            dim = self._store.get_embedding_dim()
-            return [0.0] * dim
-
-        from homeassistant.core import HomeAssistant
-        # Delegate to the embedding engine's async method
-        return await self._embedding_engine.async_generate_embedding(text)
 
     def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """Calculate cosine similarity using NumPy."""
@@ -148,7 +134,7 @@ class MemorySearch:
 
         # Generate query embedding
         try:
-            query_embedding = await self.async_generate_embedding(query)
+            query_embedding = await self._embedding_engine.async_generate_embedding(query)
         except Exception as e:
             _LOGGER.error("Failed to generate query embedding: %s", e)
             return []

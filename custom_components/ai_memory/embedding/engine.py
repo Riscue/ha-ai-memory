@@ -135,7 +135,7 @@ class EmbeddingEngine:
     async def async_update_vocabulary(self, text: str):
         """Update vocabulary for engines that need it."""
         if not self._initialized:
-            self._initialize_engine()
+            await self.async_initialize()
 
         if hasattr(self._engine, 'update_vocabulary'):
             await self.hass.async_add_executor_job(
