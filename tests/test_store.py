@@ -1,5 +1,6 @@
 """Tests for MemoryStore (SQLite connection manager)."""
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -133,3 +134,18 @@ def test_close_idempotent(store):
     store.close()
     store.close()  # Should not raise
     assert store._conn is None
+
+
+def test_concurrent_writes_from_executor_threads(tmp_path):
+    """Writes from parallel executor threads don't interleave transactions."""
+    store = MemoryStore(str(tmp_path / "test.db"))
+    store.execute_commit("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+
+    def write(i):
+        store.execute_commit("INSERT INTO t (v) VALUES (?)", (str(i),))
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(write, range(400)))
+
+    assert store.execute_query("SELECT COUNT(*) FROM t")[0][0] == 400
+    store.close()

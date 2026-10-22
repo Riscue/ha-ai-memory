@@ -2,6 +2,7 @@
 import json
 import logging
 import sqlite3
+import threading
 from typing import List, Any, Optional
 
 from ..constants import EMBEDDINGS_VECTOR_DIM
@@ -12,8 +13,9 @@ _LOGGER = logging.getLogger(__name__)
 class MemoryStore:
     """Thread-safe SQLite store with WAL mode and connection reuse.
 
-    All database access is serialized through HA's async_add_executor_job,
-    so the connection is created lazily on the executor thread and reused.
+    Database access runs in HA's executor, which is a thread pool, so
+    concurrent jobs can reach the shared connection from different threads.
+    A re-entrant lock serializes every statement and transaction.
     """
 
     def __init__(self, db_path: str):
@@ -25,6 +27,7 @@ class MemoryStore:
         self._db_path = db_path
         self._conn: Optional[sqlite3.Connection] = None
         self._embedding_dim: Optional[int] = None
+        self._lock = threading.RLock()
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get or create the SQLite connection (lazy, on executor thread)."""
@@ -46,14 +49,15 @@ class MemoryStore:
         Returns:
             List of result tuples.
         """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            return cursor.fetchall()
-        except Exception as e:
-            _LOGGER.error("Database read error: %s", e)
-            return []
+        with self._lock:
+            try:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                return cursor.fetchall()
+            except Exception as e:
+                _LOGGER.error("Database read error: %s", e)
+                return []
 
     def execute_commit(self, query: str, params: tuple = ()):
         """Execute a write query with explicit transaction.
@@ -62,18 +66,19 @@ class MemoryStore:
             query: SQL query string.
             params: Query parameters.
         """
-        conn = self._get_connection()
-        try:
-            conn.execute("BEGIN")
-            conn.execute(query, params)
-            conn.execute("COMMIT")
-        except Exception as e:
+        with self._lock:
+            conn = self._get_connection()
             try:
-                conn.execute("ROLLBACK")
-            except Exception:
-                pass
-            _LOGGER.error("Database write error: %s", e)
-            raise
+                conn.execute("BEGIN")
+                conn.execute(query, params)
+                conn.execute("COMMIT")
+            except Exception as e:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                _LOGGER.error("Database write error: %s", e)
+                raise
 
     def execute_commit_many(self, query: str, params_list: List[tuple]):
         """Execute a write query with multiple parameter sets in a single transaction.
@@ -85,18 +90,19 @@ class MemoryStore:
         if not params_list:
             return
 
-        conn = self._get_connection()
-        try:
-            conn.execute("BEGIN")
-            conn.executemany(query, params_list)
-            conn.execute("COMMIT")
-        except Exception as e:
+        with self._lock:
+            conn = self._get_connection()
             try:
-                conn.execute("ROLLBACK")
-            except Exception:
-                pass
-            _LOGGER.error("Database batch write error: %s", e)
-            raise
+                conn.execute("BEGIN")
+                conn.executemany(query, params_list)
+                conn.execute("COMMIT")
+            except Exception as e:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                _LOGGER.error("Database batch write error: %s", e)
+                raise
 
     @staticmethod
     def validate_embedding(embedding: Any, expected_dim: int = None) -> Optional[str]:
@@ -181,10 +187,11 @@ class MemoryStore:
 
     def close(self):
         """Close the SQLite connection."""
-        if self._conn is not None:
-            try:
-                self._conn.close()
-                _LOGGER.debug("SQLite connection closed")
-            except Exception as e:
-                _LOGGER.warning("Error closing SQLite connection: %s", e)
-            self._conn = None
+        with self._lock:
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                    _LOGGER.debug("SQLite connection closed")
+                except Exception as e:
+                    _LOGGER.warning("Error closing SQLite connection: %s", e)
+                self._conn = None
