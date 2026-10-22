@@ -91,6 +91,27 @@ async def test_unload_entry(hass: HomeAssistant, mock_config_entry):
         manager.close.assert_called_once()
 
 
+async def test_unload_unregisters_llm_api(hass: HomeAssistant, mock_config_entry):
+    """The LLM API registration is undone when the entry unloads."""
+    mock_config_entry.add_to_hass(hass)
+    unregister = MagicMock()
+
+    import custom_components.ai_memory
+    with patch.object(custom_components.ai_memory, "MemoryManager") as mock_manager_cls, \
+            patch.object(
+                custom_components.ai_memory.memory_llm_api,
+                "async_setup",
+                AsyncMock(return_value=unregister),
+            ), \
+            patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"):
+        mock_manager_cls.return_value.async_initialize = AsyncMock()
+        assert await async_setup_entry(hass, mock_config_entry)
+
+    unregister.assert_not_called()
+    await mock_config_entry._async_process_on_unload(hass)
+    unregister.assert_called_once()
+
+
 async def test_unload_entry_failure(hass: HomeAssistant, mock_config_entry):
     """Test unload entry failure."""
     mock_config_entry.add_to_hass(hass)

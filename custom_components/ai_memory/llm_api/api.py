@@ -1,5 +1,6 @@
 """LLM API registration for AI Memory integration."""
 import logging
+from typing import Callable, Optional
 
 import homeassistant.helpers.llm as llm
 from homeassistant.core import HomeAssistant
@@ -13,12 +14,16 @@ _LOGGER = logging.getLogger(__name__)
 API_ID = "memory_api"
 
 
-async def async_setup(hass: HomeAssistant):
-    """Set up the Memory LLM API."""
+async def async_setup(hass: HomeAssistant) -> Optional[Callable[[], None]]:
+    """Set up the Memory LLM API.
+
+    Returns the unregister callback, or None if registration failed.
+    """
     try:
-        llm.async_register_api(hass, MemoryAPI(hass))
+        return llm.async_register_api(hass, MemoryAPI(hass))
     except Exception as e:
         _LOGGER.debug("Memory LLM API registration skipped: %s", e)
+        return None
 
 
 class MemoryAPI(llm.API):

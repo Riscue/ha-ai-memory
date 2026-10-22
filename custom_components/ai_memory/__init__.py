@@ -133,7 +133,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     _LOGGER.debug("Initialized Single Memory Manager")
 
     # Initialize LLM API
-    await memory_llm_api.async_setup(hass)
+    unregister_api = await memory_llm_api.async_setup(hass)
+    if unregister_api:
+        entry.async_on_unload(unregister_api)
     _LOGGER.debug("Initialized Memory LLM API")
 
     # Forward setup
