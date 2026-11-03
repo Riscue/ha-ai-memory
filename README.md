@@ -1,7 +1,7 @@
 # 🧠 AI Memory for Home Assistant
 
 [![Home Assistant](https://img.shields.io/badge/home%20assistant-%2341BDF5.svg?style=for-the-badge&logo=home-assistant&logoColor=white)](https://home-assistant.io)
-[![hacs](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://www.hacs.xyz/docs/faq/custom_repositories/)
+[![hacs](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/default)
 [![License][license-shield]](LICENSE.md)
 
 [license-shield]: https://img.shields.io/github/license/Riscue/ha-ai-memory.svg?style=for-the-badge
@@ -27,8 +27,8 @@ recall them through vector similarity search.
   a script response variable.
 - **Memory Palace**: Memories are organized into **Wing → Room** (e.g. `household/devices`,
   `personal/preferences`) so the agent — or the user — can scope recall and writes.
-- **Layered memory (L0–L3)**: Identity (L0, in config), Critical (L1), Standard (L2, default),
-  Archive (L3). Promotion/demotion thresholds are wired in `constants.py`; the background job that
+- **Layered memory (L0–L3)**: Identity (L0, planned), Critical (L1), Standard (L2, default),
+  Archive (L3). Promotion/demotion thresholds are defined in `constants.py`; the background job that
   moves rows between L1/L2/L3 is still pending (see *Roadmap*).
 - **Privacy-first scopes**: `private` (only the owning agent sees it) vs `common` (all agents share
   it). Wings carry a default scope so household/personal data lands in the right place.
@@ -39,27 +39,24 @@ recall them through vector similarity search.
 
 ## 📋 Requirements
 
-- Home Assistant ≥ 2025.11.3 (tested against 2026.4.2)
-- Python 3.14
+- Home Assistant ≥ 2025.11.3 (tested against 2026.9.0)
 - *(Optional, recommended)* An embedding service — either [Ollama](https://ollama.com) or any
   OpenAI-compatible server. The default model is `bge-m3` (1024-dim). `all-minilm` (384-dim)
   also works well and uses less RAM.
-- Without a remote service, the integration falls back to a built-in TF-IDF engine.
+- No embedding server? Pick the built-in TF-IDF provider during setup — it has no dependencies.
 
 ## 🚀 Installation
 
 ### HACS (recommended)
 
-Add this repository as a [custom repository](https://www.hacs.xyz/docs/faq/custom_repositories/)
-in HACS, then install **AI Memory**.
-
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Riscue&repository=ha-ai-memory)
 
 ### Manual
 
-1. Copy the `custom_components/ai_memory/` directory into your HA `config/custom_components/`.
-2. Restart Home Assistant.
-3. Add the integration via **Settings → Devices & Services → Add Integration**.
+1. Download `ai_memory.zip` from the latest [release](https://github.com/Riscue/ha-ai-memory/releases).
+2. Extract it into `<ha_config>/custom_components/ai_memory/`.
+3. Restart Home Assistant.
+4. Add the integration via **Settings → Devices & Services → Add Integration**.
 
 [![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ai_memory)
 
@@ -281,7 +278,7 @@ listens to that event and refreshes its attributes:
 - `layer_distribution`: `{L0, L1, L2, L3}` counts
 - `wing_distribution`: count per wing
 - `palace_structure`: `{wings, rooms}` totals from the palace
-- All config-entry data (provider, model name, remote URL, …)
+- `remote_url`, `model_name` (when set) — the API key is never exposed
 
 Use it in templates, dashboards, or to trigger automations when memory changes.
 
@@ -306,6 +303,17 @@ Use it in templates, dashboards, or to trigger automations when memory changes.
 - **Wing/room shows up as something unexpected** — wing/room is auto-created when an unknown value
   reaches the store. If the LLM persistently picks bad names, adjust `prompts.py` (the system
   prompt) rather than trying to validate at write time.
+
+### Enabling debug logging
+
+Add this to your `configuration.yaml`:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.ai_memory: debug
+```
 
 ## 🗺️ Roadmap
 
