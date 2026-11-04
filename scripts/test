@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+source homeassistant/bin/activate
+
+pytest "$@" --cov

@@ -1,8 +1,10 @@
 """Tests for LLM API and Tools."""
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import llm as ha_llm
 
 from custom_components.ai_memory.constants import DOMAIN
 
@@ -123,8 +125,10 @@ async def test_search_memory_tool(mock_manager):
     ]
 
     result = await tool.async_call(hass, tool_input, llm_context)
-    assert result["success"] is True
-    assert "Result 1" in result["results"]
+    assert isinstance(result, ha_llm.ToolResult)
+    assert result.error is False
+    assert result.data["success"] is True
+    assert "Result 1" in result.data["results"]
 
 
 async def test_search_memory_tool_no_results(mock_manager):
@@ -138,8 +142,8 @@ async def test_search_memory_tool_no_results(mock_manager):
     mock_manager.async_search_memory.return_value = []
 
     result = await tool.async_call(hass, tool_input, llm_context)
-    assert result["success"] is True
-    assert "No matching memories found" in result["message"]
+    assert result.data["success"] is True
+    assert "No matching memories found" in result.data["message"]
 
 
 async def test_search_memory_tool_error(mock_manager):
@@ -165,8 +169,9 @@ async def test_delete_memory_tool(mock_manager):
     llm_context = MockLLMContext("agent_1")
 
     result = await tool.async_call(hass, tool_input, llm_context)
-    assert result["success"] is True
-    assert "Deleted 1" in result["message"]
+    assert result.error is False
+    assert result.data["success"] is True
+    assert "Deleted 1" in result.data["message"]
     mock_manager.async_delete_memory.assert_called_with(agent_id="agent_1", room="living_room", wing=None, scope=None)
 
 
@@ -179,8 +184,9 @@ async def test_delete_memory_tool_validation_error(mock_manager):
     llm_context = MockLLMContext("agent_1")
 
     result = await tool.async_call(hass, tool_input, llm_context)
-    assert result["success"] is False
-    assert "at least one filter" in result["message"]
+    assert result.error is True
+    assert result.data["success"] is False
+    assert "at least one filter" in result.data["message"]
     mock_manager.async_delete_memory.assert_not_called()
 
 
@@ -196,6 +202,37 @@ async def test_get_api_instance_success(mock_manager):
     assert hasattr(instance, 'api')
     assert hasattr(instance, 'tools')
     assert len(instance.tools) == 3  # add, search, delete
+    assert all(tool.integration == DOMAIN for tool in instance.tools)
+
+
+async def test_tools_called_through_api_instance(hass: HomeAssistant, mock_manager, monkeypatch):
+    """Calling tools through the real APIInstance must not hit HA deprecations.
+
+    In tests frame.report_usage raises, so an untagged tool or a plain JSON
+    return value would fail here.
+    """
+    # async_call_tool imports the conversation component only to record the call
+    # in the trace; stub it so its requirements (hassil, ...) aren't needed.
+    conversation = MagicMock()
+    monkeypatch.setitem(sys.modules, "homeassistant.components.conversation", conversation)
+    hass.data[DOMAIN] = {"manager": mock_manager}
+    mock_manager.async_delete_memory.return_value = 2
+    llm_context = ha_llm.LLMContext(
+        platform="agent_1", context=None, language="en", assistant=None, device_id=None,
+    )
+
+    instance = await llm_api.MemoryAPI(hass).async_get_api_instance(llm_context)
+
+    add = await instance.async_call_tool(
+        ha_llm.ToolInput("add_memory", {"content": "Test", "scope": "common"})
+    )
+    search = await instance.async_call_tool(ha_llm.ToolInput("search_memory", {"query": "Test"}))
+    delete = await instance.async_call_tool(ha_llm.ToolInput("delete_memory", {"wing": "general"}))
+
+    assert add.data["success"] is True
+    assert "No matching memories found" in search.data["message"]
+    assert "Deleted 2" in delete.data["message"]
+    assert conversation.async_conversation_trace_append.call_count == 3
 
 
 async def test_get_api_instance_no_manager():

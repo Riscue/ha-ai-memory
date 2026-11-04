@@ -47,7 +47,8 @@ def memory_manager(mock_hass, mock_embedding_engine):
         mock_engine_cls.return_value = mock_embedding_engine
         manager = MemoryManager(mock_hass, db_path=":memory:")
         manager.initialize_store()
-        return manager
+    yield manager
+    manager.close()
 
 
 async def test_init_creates_tables(memory_manager):
@@ -233,6 +234,7 @@ async def test_async_initialize_failure(mock_hass, mock_embedding_engine):
 
         with pytest.raises(ConfigEntryNotReady, match="Remote embedding service is not reachable"):
             await manager.async_initialize()
+    manager.close()
 
 
 async def test_async_initialize_loads_model_in_background(mock_hass, mock_embedding_engine):
@@ -256,6 +258,7 @@ async def test_async_initialize_loads_model_in_background(mock_hass, mock_embedd
 
     manager.async_cancel_tasks()
     task.cancel.assert_called_once()
+    manager.close()
 
 
 async def test_init_does_no_io(mock_hass, mock_embedding_engine):
@@ -304,6 +307,7 @@ async def test_tfidf_reembeds_legacy_vectors_once(mock_hass):
 
     # Marker is set, so a second run is a no-op
     assert manager._reembed_tfidf_if_needed() == 0
+    manager.close()
 
 
 async def test_remote_engine_clears_tfidf_marker(mock_hass, mock_embedding_engine):
@@ -323,3 +327,4 @@ async def test_remote_engine_clears_tfidf_marker(mock_hass, mock_embedding_engin
     assert manager._store.execute_query(
         "SELECT value FROM _meta WHERE key = 'tfidf_hash'"
     ) == []
+    manager.close()

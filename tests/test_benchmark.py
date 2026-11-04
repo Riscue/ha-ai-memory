@@ -27,11 +27,10 @@ QUERIES = [
 
 
 @pytest.fixture(scope="function")
-async def ollama_available():
-    """Check if Ollama is running on localhost."""
-    engine = RemoteEmbeddingEngine(None, {"remote_url": DEFAULT_REMOTE_URL})
+async def ollama_available(hass):
+    """Check if Ollama is running at DEFAULT_REMOTE_URL."""
+    engine = RemoteEmbeddingEngine(hass, {"remote_url": DEFAULT_REMOTE_URL})
     is_available = await engine.async_get_version()
-    print(is_available)
     if not is_available:
         pytest.skip(f"Ollama not available at {DEFAULT_REMOTE_URL} - skipping benchmark tests")
     return is_available
@@ -96,4 +95,5 @@ class TestMemoryBenchmark:
         _LOGGER.info("-" * 120)
         _LOGGER.info(f"Total Tests: {len(QUERIES)}, Passed: {total_passed}")
 
+        await hass.async_add_executor_job(manager.close)
         assert total_passed == len(QUERIES), f"Only {total_passed}/{len(QUERIES)} queries passed the benchmark."

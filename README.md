@@ -39,7 +39,7 @@ recall them through vector similarity search.
 
 ## 📋 Requirements
 
-- Home Assistant ≥ 2025.11.3 (tested against 2026.9.0)
+- Home Assistant ≥ 2025.11.3 (tested against 2026.10.4)
 - *(Optional, recommended)* An embedding service — either [Ollama](https://ollama.com) or any
   OpenAI-compatible server. The default model is `bge-m3` (1024-dim). `all-minilm` (384-dim)
   also works well and uses less RAM.
