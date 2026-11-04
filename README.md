@@ -199,7 +199,7 @@ response_variable: results
 ```
 
 Supported filters: `query` (required), `limit`, `min_score`, `wing`, `room`, `agent_id`. If no
-semantic match is found, the engine falls back to tokenized `LIKE` search and tags the result with
+semantic match is found, the engine falls back to keyword matching and tags the result with
 `match_type: "text"`, `score: 0.0`.
 
 ### `ai_memory.delete_memory`
@@ -257,9 +257,13 @@ as `layer=2` and stays there.
    `room` filters.
 2. **Semantic similarity** — embeds the query, computes cosine similarity with NumPy against
    stored vectors, keeps results above `min_score` (default `0.55`).
-3. **Text fallback** — if nothing clears the threshold, a tokenized `LIKE` search on
-   `content`+`summary` returns the best matches with `match_type="text"`, `score=0.0`.
-4. **Access tracking** — every returned row gets its `access_count` and `accessed_at` bumped, which
+3. **Text fallback** — if nothing clears the threshold, query keywords are matched against
+   `content`+`summary` of the same pre-filtered rows. Matching is case-insensitive (Turkish
+   `İ/I/ı` included), ignores common English/Turkish question words, and matches whole words for
+   short terms (`tv`, `8`) or word prefixes for longer ones (`çay` → `çayı`). A memory must contain
+   at least half of the keywords; results are ranked by keyword hits and returned with
+   `match_type="text"`, `score=0.0`.
+4. **Access tracking** — every returned row (semantic or text) gets its `access_count` and `accessed_at` bumped, which
    feeds future promotion decisions.
 
 > **Embedding dimension is auto-detected.** Different models produce different dims (`bge-m3=1024`,

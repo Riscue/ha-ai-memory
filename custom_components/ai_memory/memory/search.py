@@ -1,6 +1,8 @@
 """Semantic search engine for AI Memory integration."""
 import json
 import logging
+import math
+import re
 from typing import List, Dict, Optional
 
 import numpy as np
@@ -9,6 +11,74 @@ from ..constants import SIMILARITY_THRESHOLD, MEMORY_LIMIT
 from .store import MemoryStore
 
 _LOGGER = logging.getLogger(__name__)
+
+TEXT_FALLBACK_MIN_TOKEN_LEN = 2
+
+# Keywords shorter than this must match a whole word ("tv", "ac"); longer
+# ones match word prefixes so Turkish suffixes still hit ("çay" -> "çayı").
+TEXT_FALLBACK_PREFIX_MIN_LEN = 3
+
+
+def _normalize(text: str) -> str:
+    """Lowercase and fold Turkish dotted/dotless i to plain "i".
+
+    str.lower() maps "İ" to "i" + U+0307 and "I" to "i" (never "ı"), so both
+    sides are folded to the same form instead of relying on locale rules.
+    """
+    return text.lower().replace("\u0307", "").replace("ı", "i")
+
+
+def _words(text: str) -> List[str]:
+    """Split normalized text into word tokens."""
+    return re.findall(r"\w+", _normalize(text))
+
+
+# Question/filler words that would match unrelated memories in the text
+# fallback. Memories are written in third person, so "user" is noise too.
+# Matched against query tokens only, as normalized whole words.
+TEXT_FALLBACK_STOPWORDS = frozenset(_normalize(w) for w in {
+    # English
+    "about", "all", "am", "an", "and", "any", "are", "as", "at", "be", "but",
+    "by", "can", "could", "did", "do", "does", "for", "from", "had", "has",
+    "have", "how", "if", "in", "is", "it", "its", "know", "like", "liked",
+    "likes", "me", "mine", "my", "no", "not", "of", "on", "or", "our",
+    "remember", "should", "so", "some", "tell", "that", "the", "their",
+    "them", "there", "these", "they", "this", "those", "to", "user", "users",
+    "was", "we", "were", "what", "when", "where", "which", "who", "whom",
+    "whose", "why", "will", "with", "would", "you", "your", "yours",
+    # Turkish
+    "acaba", "ama", "bana", "ben", "benim", "beni", "bir", "bu", "çok", "da",
+    "daha", "de", "değil", "en", "gibi", "hangi", "için", "ile", "kadar", "ki",
+    "kullanıcı", "kullanıcıya", "kullanıcıyı", "kullanıcının", "mı", "mi",
+    "mu", "mü", "mıyım", "miyim", "muyum", "müyüm", "nasıl", "ne", "neden",
+    "nedir", "neyi", "niye", "ona", "onu", "onun", "sana", "sen", "senin",
+    "seni", "şu", "var", "ve", "veya", "ya", "yok",
+})
+
+
+def _keywords(query: str) -> List[str]:
+    """Extract unique, meaningful normalized keywords from a query.
+
+    Numbers are always kept ("8 AM", "22 derece").
+    """
+    seen: Dict[str, None] = {}
+    for token in _words(query):
+        if token in TEXT_FALLBACK_STOPWORDS:
+            continue
+        if len(token) >= TEXT_FALLBACK_MIN_TOKEN_LEN or token.isdigit():
+            seen.setdefault(token, None)
+    return list(seen)
+
+
+def _keyword_hits(keywords: List[str], words: set) -> int:
+    """Count keywords that appear in a set of words."""
+    hits = 0
+    for keyword in keywords:
+        if len(keyword) < TEXT_FALLBACK_PREFIX_MIN_LEN:
+            hits += keyword in words
+        else:
+            hits += any(word.startswith(keyword) for word in words)
+    return hits
 
 
 class MemorySearch:
@@ -148,99 +218,68 @@ class MemorySearch:
         scored_memories = await hass.async_add_executor_job(
             self._score_rows, rows, query_vec, min_score
         )
-        result_ids = [m["id"] for m in scored_memories]
         result = scored_memories[:limit]
 
-        # Text fallback when semantic search returns nothing
+        # Text fallback when semantic search returns nothing; reuses the
+        # already scope/wing/room-filtered rows
         if not result:
-            result = await self._text_fallback_search(
-                query, agent_id, wing, room, limit, hass
+            result = await hass.async_add_executor_job(
+                self._text_match_rows, rows, query, limit
             )
-            if result:
-                return result
 
         # Update access_count for returned results (batch)
-        if result_ids and hass:
+        if result:
             from datetime import datetime
             now = datetime.now().isoformat()
-            # Only update IDs that made it into the result
             update_ids = [m["id"] for m in result]
-            if update_ids:
-                placeholders = ",".join("?" for _ in update_ids)
-                try:
-                    await hass.async_add_executor_job(
-                        self._store.execute_commit,
-                        f"UPDATE memories SET access_count = access_count + 1, accessed_at = ? WHERE id IN ({placeholders})",
-                        (now, *update_ids),
-                    )
-                except Exception as e:
-                    _LOGGER.debug("Access count update skipped: %s", e)
+            placeholders = ",".join("?" for _ in update_ids)
+            try:
+                await hass.async_add_executor_job(
+                    self._store.execute_commit,
+                    f"UPDATE memories SET access_count = access_count + 1, accessed_at = ? WHERE id IN ({placeholders})",
+                    (now, *update_ids),
+                )
+            except Exception as e:
+                _LOGGER.debug("Access count update skipped: %s", e)
 
         return result
 
-    async def _text_fallback_search(
-        self,
-        query: str,
-        agent_id: Optional[str],
-        wing: Optional[str],
-        room: Optional[str],
-        limit: int,
-        hass,
-    ) -> List[Dict]:
-        """Fallback text search when semantic search returns nothing.
+    def _text_match_rows(self, rows: list, query: str, limit: int) -> List[Dict]:
+        """Fallback text match when semantic search returns nothing (executor).
 
-        Searches content and summary fields using LIKE matching.
-        Each token in the query is matched independently (OR logic).
+        Matches query keywords against content and summary. Precision is
+        preferred over recall: stopwords are dropped, keywords match whole
+        words or word prefixes (not arbitrary substrings), and a memory must
+        contain at least half of the keywords.
         """
-        tokens = [t.lower() for t in query.split() if len(t) > 1]
-        if not tokens or not hass:
+        keywords = _keywords(query)
+        if not keywords:
             return []
 
-        conditions = []
-        params: list = [agent_id]
-        for token in tokens:
-            conditions.append("(LOWER(content) LIKE ? OR LOWER(summary) LIKE ?)")
-            params.extend([f"%{token}%", f"%{token}%"])
-
-        sql = f"""SELECT id, content, scope, agent_id, created_at,
-                         summary, wing, room, layer
-                  FROM memories
-                  WHERE (scope = 'common' OR (scope = 'private' AND agent_id = ?))
-                  AND ({" OR ".join(conditions)})"""
-
-        if wing:
-            sql += " AND wing = ?"
-            params.append(wing)
-        if room:
-            sql += " AND room = ?"
-            params.append(room)
-
-        sql += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-
-        try:
-            rows = await hass.async_add_executor_job(
-                self._store.execute_query, sql, tuple(params)
-            )
-        except Exception as e:
-            _LOGGER.debug("Text fallback search failed: %s", e)
-            return []
-
-        results = []
+        required = math.ceil(len(keywords) / 2)
+        matches = []
         for row in rows:
-            results.append({
-                "id": row[0],
-                "content": row[1],
-                "score": 0.0,
-                "scope": row[2],
-                "agent_id": row[3],
-                "created_at": row[4],
-                "summary": row[5],
-                "wing": row[6],
-                "room": row[7],
-                "layer": row[8],
-                "match_type": "text",
-            })
+            memory_id, content, _emb, scope, row_agent_id, created_at, \
+                summary, mem_wing, mem_room, layer, _access_count = row
+            words = set(_words(f"{content or ''} {summary or ''}"))
+            hits = _keyword_hits(keywords, words)
+            if hits >= required:
+                matches.append((hits, created_at or "", {
+                    "id": memory_id,
+                    "content": content,
+                    "score": 0.0,
+                    "scope": scope,
+                    "agent_id": row_agent_id,
+                    "created_at": created_at,
+                    "summary": summary,
+                    "wing": mem_wing,
+                    "room": mem_room,
+                    "layer": layer,
+                    "match_type": "text",
+                }))
+
+        matches.sort(key=lambda m: (m[0], m[1]), reverse=True)
+        results = [m[2] for m in matches[:limit]]
 
         if results:
             _LOGGER.debug("Text fallback found %d results for: %s", len(results), query)

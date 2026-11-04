@@ -169,6 +169,137 @@ async def test_text_fallback_no_match(search, store, mock_hass, mock_embedding_e
     assert results == []
 
 
+async def test_text_fallback_ignores_stopwords(search, store, mock_hass, mock_embedding_engine):
+    """Common question words must not match unrelated memories."""
+    _insert_memory(store, "The user does not want the blinds opened before 8 AM.", "common", embedding=None)
+    _insert_memory(store, "The user likes pizza.", "common", embedding=None)
+
+    results = await search.async_search("Do I like jazz music?", "agent_1", hass=mock_hass)
+    assert results == []
+
+
+async def test_text_fallback_only_stopwords(search, store, mock_hass, mock_embedding_engine):
+    """A query made only of stopwords returns nothing."""
+    _insert_memory(store, "The user likes pizza.", "common", embedding=None)
+
+    results = await search.async_search("What do I like?", "agent_1", hass=mock_hass)
+    assert results == []
+
+
+async def test_text_fallback_requires_half_of_keywords(search, store, mock_hass, mock_embedding_engine):
+    """A single keyword hit is not enough when the query has several keywords."""
+    _insert_memory(store, "The user plays guitar.", "common", embedding=None)
+
+    results = await search.async_search("guitar piano violin drums", "agent_1", hass=mock_hass)
+    assert results == []
+
+    results = await search.async_search("guitar piano", "agent_1", hass=mock_hass)
+    assert len(results) == 1
+
+
+async def test_text_fallback_strips_punctuation(search, store, mock_hass, mock_embedding_engine):
+    """Punctuation attached to words does not prevent a match."""
+    _insert_memory(store, "The user supports Real Madrid.", "common", embedding=None)
+
+    results = await search.async_search("Madrid?", "agent_1", hass=mock_hass)
+    assert len(results) == 1
+
+
+async def test_text_fallback_unicode_case_insensitive(search, store, mock_hass, mock_embedding_engine):
+    """Non-ASCII uppercase letters are folded (SQLite LOWER() would not)."""
+    _insert_memory(store, "Kullanıcı ÇAY sever.", "common", embedding=None)
+
+    results = await search.async_search("çay", "agent_1", hass=mock_hass)
+    assert len(results) == 1
+
+
+async def test_text_fallback_ranks_by_hits(search, store, mock_hass, mock_embedding_engine):
+    """Memories matching more keywords come first."""
+    _insert_memory(store, "The user drinks coffee.", "common", embedding=None)
+    _insert_memory(store, "The user drinks coffee every morning.", "common", embedding=None)
+
+    results = await search.async_search("coffee morning", "agent_1", hass=mock_hass)
+    assert [r["content"] for r in results] == [
+        "The user drinks coffee every morning.",
+        "The user drinks coffee.",
+    ]
+
+
+async def test_text_fallback_respects_scope(search, store, mock_hass, mock_embedding_engine):
+    """Private memories of other agents are not returned by the text fallback."""
+    _insert_memory(store, "Secret guitar notes", "private", agent_id="agent_2", embedding=None)
+
+    results = await search.async_search("guitar", "agent_1", hass=mock_hass)
+    assert results == []
+
+
+async def test_text_fallback_short_terms_and_numbers(search, store, mock_hass, mock_embedding_engine):
+    """Two-letter terms and numbers are kept, and match whole words only."""
+    _insert_memory(store, "The TV in the living room is a Sony.", "common", embedding=None)
+    _insert_memory(store, "The user's bank account is at ING.", "common", embedding=None)
+    _insert_memory(store, "The alarm is set for 8 AM.", "common", embedding=None)
+
+    results = await search.async_search("Is the TV on?", "agent_1", hass=mock_hass)
+    assert [r["content"] for r in results] == ["The TV in the living room is a Sony."]
+
+    results = await search.async_search("Is the AC on?", "agent_1", hass=mock_hass)
+    assert results == []
+
+    results = await search.async_search("8", "agent_1", hass=mock_hass)
+    assert [r["content"] for r in results] == ["The alarm is set for 8 AM."]
+
+
+async def test_text_fallback_matches_word_prefix_not_substring(search, store, mock_hass, mock_embedding_engine):
+    """Keywords match word prefixes (Turkish suffixes) but not inner substrings."""
+    _insert_memory(store, "The user wears a red scarf.", "common", embedding=None)
+    _insert_memory(store, "Kullanıcı sabahları çayı şekersiz içer.", "common", embedding=None)
+
+    results = await search.async_search("car", "agent_1", hass=mock_hass)
+    assert results == []
+
+    results = await search.async_search("çay", "agent_1", hass=mock_hass)
+    assert len(results) == 1
+
+
+async def test_text_fallback_turkish_dotted_i(search, store, mock_hass, mock_embedding_engine):
+    """Turkish I/ı and İ/i fold together regardless of case."""
+    _insert_memory(store, "Salondaki ısıtıcı akşam açılır.", "common", embedding=None)
+    _insert_memory(store, "Kullanıcı İzmir'de yaşıyor.", "common", embedding=None)
+
+    results = await search.async_search("ISITICI", "agent_1", hass=mock_hass)
+    assert len(results) == 1
+    assert "ısıtıcı" in results[0]["content"]
+
+    results = await search.async_search("izmir", "agent_1", hass=mock_hass)
+    assert len(results) == 1
+    assert "İzmir" in results[0]["content"]
+
+    # Uppercase stopword is still recognized after folding
+    results = await search.async_search("KULLANICI", "agent_1", hass=mock_hass)
+    assert results == []
+
+
+async def test_text_fallback_respects_wing_filter(search, store, mock_hass, mock_embedding_engine):
+    """Text fallback honors wing/room filters."""
+    _insert_memory(store, "Guitar lessons on Monday", "common", wing="personal", room="hobbies", embedding=None)
+    _insert_memory(store, "Guitar amp is in the garage", "common", wing="household", room="devices", embedding=None)
+
+    results = await search.async_search("guitar", "agent_1", wing="Household", hass=mock_hass)
+    assert [r["content"] for r in results] == ["Guitar amp is in the garage"]
+
+
+async def test_text_fallback_updates_access_count(search, store, mock_hass, mock_embedding_engine):
+    """Results returned by the text fallback also bump access_count."""
+    mem_id = _insert_memory(store, "The user plays guitar.", "common", embedding=None)
+
+    results = await search.async_search("guitar", "agent_1", hass=mock_hass)
+    assert results[0]["match_type"] == "text"
+
+    rows = store.execute_query("SELECT access_count, accessed_at FROM memories WHERE id = ?", (mem_id,))
+    assert rows[0][0] == 1
+    assert rows[0][1] is not None
+
+
 async def test_cosine_similarity():
     """Test cosine similarity calculation."""
     s = MemorySearch.__new__(MemorySearch)
