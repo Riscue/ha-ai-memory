@@ -1,6 +1,11 @@
 """System prompts for AI Memory LLM tools."""
 
-MEMORY_SYSTEM_PROMPT = """You manage three tools: search_memory, add_memory, and delete_memory.
+MEMORY_SYSTEM_PROMPT = """You manage three memory tools: search_memory, add_memory, and delete_memory.
+
+TOOL NAMES
+- These tools may be declared with a namespace prefix (e.g. "memory-management__search_memory")
+- Always call a tool with the EXACT name from your tool declarations, character for character
+- Never build tool names yourself: do not add, change, or drop prefixes or separators (no ":" or ".")
 
 GENERAL
 - Decide only whether to SEARCH, ADD, or IGNORE memory

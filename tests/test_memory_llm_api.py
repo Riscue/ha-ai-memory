@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import llm as ha_llm
 
 from custom_components.ai_memory.constants import DOMAIN
@@ -234,6 +235,37 @@ async def test_tools_called_through_api_instance(hass: HomeAssistant, mock_manag
     assert "Deleted 2" in delete.data["message"]
     assert conversation.async_conversation_trace_append.call_count == 3
 
+
+
+async def test_tools_namespaced_in_merged_api(hass: HomeAssistant, mock_manager, monkeypatch):
+    """With several LLM APIs enabled, HA prefixes tool names with the API name slug.
+
+    Agents must call "memory-management__search_memory"; any other separator
+    (e.g. "memory-management:search_memory") is rejected by Home Assistant.
+    """
+    conversation = MagicMock()
+    monkeypatch.setitem(sys.modules, "homeassistant.components.conversation", conversation)
+    hass.data[DOMAIN] = {"manager": mock_manager}
+    llm_context = ha_llm.LLMContext(
+        platform="agent_1", context=None, language="en", assistant=None, device_id=None,
+    )
+
+    merged = ha_llm.MergedAPI([llm_api.MemoryAPI(hass)])
+    instance = await merged.async_get_api_instance(llm_context)
+
+    assert {tool.name for tool in instance.tools} == {
+        "memory-management__add_memory",
+        "memory-management__search_memory",
+        "memory-management__delete_memory",
+    }
+    search = await instance.async_call_tool(
+        ha_llm.ToolInput("memory-management__search_memory", {"query": "Test"})
+    )
+    assert "No matching memories found" in search.data["message"]
+    with pytest.raises(HomeAssistantError, match="not found"):
+        await instance.async_call_tool(
+            ha_llm.ToolInput("memory-management:search_memory", {"query": "Test"})
+        )
 
 async def test_get_api_instance_no_manager():
     """Test getting API instance when manager is missing."""
